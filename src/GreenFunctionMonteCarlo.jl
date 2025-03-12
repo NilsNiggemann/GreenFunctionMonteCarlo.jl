@@ -4,7 +4,8 @@ Green function Monte Carlo is a method to sample from the ground state of sign-p
 module GreenFunctionMonteCarlo
     include("AbstractTypes/AbstractTypes.jl")
 
-    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction
+    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem
     export propagateWalkers!, fulfills_constraints, InverseMove, apply!
 
+    include("DefaultFormalism/ManyWalkerGFMC.jl")
 end # module
