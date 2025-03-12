@@ -34,7 +34,7 @@ function log_psi_diff(x::AbstractArray, dx::AbstractArray,logψ::AbstractGuiding
 end
 
 get_params(logψ::AbstractGuidingFunction) = throw(MethodError(get_params, (logψ,)))
-HDF5.h5write(file::AbstractString,name::AbstractString,logψ::AbstractGuidingFunction) = throw(MethodError(h5write, (file,name,logψ)))
+# HDF5.h5write(file::AbstractString,name::AbstractString,logψ::AbstractGuidingFunction) = throw(MethodError(h5write, (file,name,logψ)))
 
 allocate_GWF_buffers(logψ::AbstractGuidingFunction, NBuffers::Integer) = fill(EmptyGWFBuffer(),NBuffers)
 

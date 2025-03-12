@@ -1,5 +1,5 @@
 include("AbstractHilbertSpace.jl")
-include("AbstractConfig.jl")
 include("AbstractWalkerEnsemble.jl")
+include("AbstractOperator.jl")
 include("AbstractGuidingFunctions.jl")
 include("AbstractPropagator.jl")
