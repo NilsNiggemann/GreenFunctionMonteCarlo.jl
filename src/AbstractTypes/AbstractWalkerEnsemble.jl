@@ -12,9 +12,9 @@ An abstract type that represents an ensemble of configurations (i.e. spins, boso
 """
 abstract type AbstractWalkerEnsemble end
 
-getConfigs(X::AbstractWalkerEnsemble) = throw(MethodError(getConfigs, (X,)))
-getWeights(X::AbstractWalkerEnsemble) = throw(MethodError(getWeights, (X,)))
-getBuffers(X::AbstractWalkerEnsemble) = throw(MethodError(getBuffers, (X,)))
+function getConfigs end
+function getWeights end
+function getBuffers end
 NWalkers(X::AbstractWalkerEnsemble) = length(getConfigs(X))
 
 

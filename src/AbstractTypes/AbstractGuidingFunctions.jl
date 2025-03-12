@@ -8,6 +8,7 @@ An abstract type for all guiding function implementations in Green Function Mont
 - `log_psi_diff(x::AbstractArray, dx::AbstractArray, logψ::AbstractGuidingFunction, Buffer::AbstractGuidingFunctionBuffer, Hilbert::AbstractHilbertSpace)`: return the logarithm of the ratio of the guiding function evaluated at the configuration `x` and `x+dx` in the specified `HilbertSpace`. Returns `-Inf` if the move is not applicable.
 - get_params(logψ::AbstractGuidingFunction): return the parameters of the guiding function as a linear Array. It is recommended to use RecursiveArrayTools.jl for this purpose.
 - HDF5.h5write(file::AbstractString, name::AbstractString, logψ::AbstractGuidingFunction): write the guiding function to an HDF5 file.
+# Interface (optional)
 - allocate_GWF_buffers(logψ::AbstractGuidingFunction, NBuffers::Integer): allocate NBuffers instances of a buffer for the guiding function. Defaults to an array of EmptyGWFBuffer instances.
 - compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer, logψ::AbstractGuidingFunction, x): compute the full buffer for the guiding function at the configuration `x`. 
 - pre_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, dx, logψ::AbstractGuidingFunction): perform any necessary operations before the move is applied.
@@ -18,7 +19,7 @@ abstract type AbstractGuidingFunctionBuffer end
 
 struct EmptyGWFBuffer <: AbstractGuidingFunctionBuffer end
 
-@inline (logψ::AbstractGuidingFunction)(x::AbstractArray) = throw(MethodError(logψ, (x,)))
+function (logψ::AbstractGuidingFunction) end
 @inline (logψ::AbstractGuidingFunction)(x::AbstractArray,::AbstractHilbertSpace) = logψ(x)
 
 function log_psi_diff(x::AbstractArray, dx::AbstractArray,logψ::AbstractGuidingFunction, Buffer::AbstractGuidingFunctionBuffer,Hilbert::AbstractHilbertSpace)
@@ -33,7 +34,7 @@ function log_psi_diff(x::AbstractArray, dx::AbstractArray,logψ::AbstractGuiding
     return logpsi_new - logpsi
 end
 
-get_params(logψ::AbstractGuidingFunction) = throw(MethodError(get_params, (logψ,)))
+function get_params end
 # HDF5.h5write(file::AbstractString,name::AbstractString,logψ::AbstractGuidingFunction) = throw(MethodError(h5write, (file,name,logψ)))
 
 allocate_GWF_buffers(logψ::AbstractGuidingFunction, NBuffers::Integer) = fill(EmptyGWFBuffer(),NBuffers)

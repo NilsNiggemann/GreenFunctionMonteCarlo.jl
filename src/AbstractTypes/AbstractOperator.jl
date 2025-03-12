@@ -20,14 +20,13 @@ abstract type DiagonalOperator end
     get_moves(O::AbstractOperator)
 Retrieves the possible moves for a given `AbstractOperator` object `O`. For general local operators, the length should be proportional to the number of sites in the system.
 """
-get_moves(O::AbstractOperator) = throw(MethodError(get_moves, (O,)))
+function get_moves end
 
 """
     get_weights(O::AbstractOperator)
 
 Return the weights associated with an `AbstractOperator` object `O`. 
 """
-get_weights(O::AbstractOperator) = throw(MethodError(get_weights, (O,)))
+function get_weights end
 
-(D::DiagonalOperator)(x) = throw(MethodError(D, (x,)))
-(D::DiagonalOperator)(x, params) = D(x)
+function (D::DiagonalOperator) end
