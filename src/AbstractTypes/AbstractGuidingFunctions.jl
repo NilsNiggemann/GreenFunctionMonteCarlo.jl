@@ -22,7 +22,7 @@ struct EmptyGWFBuffer <: AbstractGuidingFunctionBuffer end
 function (logψ::AbstractGuidingFunction) end
 @inline (logψ::AbstractGuidingFunction)(x::AbstractArray,::AbstractHilbertSpace) = logψ(x)
 
-function log_psi_diff(x::AbstractArray, dx::AbstractArray,logψ::AbstractGuidingFunction, Buffer::AbstractGuidingFunctionBuffer,Hilbert::AbstractHilbertSpace)
+function log_psi_diff(x, dx,logψ::AbstractGuidingFunction, Buffer::AbstractGuidingFunctionBuffer,Hilbert::AbstractHilbertSpace)
     logpsi = logψ(x)
     apply_move!(x,dx)
     if fulfills_constraint(x,Hilbert) 

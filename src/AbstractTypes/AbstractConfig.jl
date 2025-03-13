@@ -88,7 +88,7 @@ Check if a given move is applicable to the current configuration within a specif
 
 # Arguments
 - `x::AbstractConfig`: The current configuration.
-- `move::AbstractArray`: The proposed move to be applied.
+- `move::AbstractMove`: The proposed move to be applied.
 - `HilbertSpace::AbstractHilbertSpace`: The Hilbert space in which the configuration and move are defined.
 
 # Returns
@@ -98,7 +98,7 @@ Defaults to applying the move to the configuration, checking if the constraints 
 
 Make sure to implement this function for specific subtypes of `AbstractConfig` and `AbstractHilbertSpace` to ensure optimal performance.
 """
-function isapplicable(x::AbstractConfig, move::AbstractArray, HilbertSpace::AbstractHilbertSpace)
+function isapplicable(x::AbstractConfig, move::AbstractMove, HilbertSpace::AbstractHilbertSpace)
     apply!(x, move)
     result = fulfills_constraints(x, HilbertSpace)
     apply_inverse!(x, move)

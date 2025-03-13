@@ -4,12 +4,18 @@ authors = ["Nils Niggemann <nils.niggemann@fu-berlin.de>"]
 version = "0.1.0"
 
 [deps]
+RecursiveArrayTools = "731186ca-8d62-57ce-b412-fbd966d074cd"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[compat]
+RecursiveArrayTools = "3.31.0"
+SparseArrays = "1.11.0"
+StaticArrays = "1.9.13"
+julia = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]
-
-[compat]
-julia = "1"

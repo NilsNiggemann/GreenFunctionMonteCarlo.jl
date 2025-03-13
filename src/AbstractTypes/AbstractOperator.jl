@@ -4,6 +4,7 @@
 An abstract type representing a general operator. This serves as a base type for defining various specific operators in the context of the Green Function Monte Carlo project.
 """
 abstract type AbstractOperator end
+abstract type OffdiagonalOperator end
 
 """
     DiagonalOperator
@@ -22,11 +23,22 @@ Retrieves the possible moves for a given `AbstractOperator` object `O`. For gene
 """
 function get_moves end
 
-"""
-    get_weights(O::AbstractOperator)
-
-Return the weights associated with an `AbstractOperator` object `O`. 
-"""
-function get_weights end
-
 function (D::DiagonalOperator) end
+
+"""
+    AbstractSignFreeOperator <: AbstractOperator
+
+An abstract type representing a sign-free operator in the context of Green Function Monte Carlo simulations. 
+# Interface:
+- get_diagonal(O::AbstractSignFreeOperator): return the diagonal operator associated with the sign-free operator `O`
+- get_offdiagonal_elements(O::AbstractSignFreeOperator): return the weights associated with the off-diagonal operator `O`
+"""
+abstract type AbstractSignFreeOperator <: AbstractOperator end
+"""
+    get_offdiagonal_elements(O::AbstractSignFreeOperator)
+
+Return the weights associated with an `OffdiagonalOperator` object `O`. 
+"""
+function get_offdiagonal_elements end
+
+function get_diagonal end

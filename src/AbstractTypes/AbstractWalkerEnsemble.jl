@@ -5,7 +5,7 @@ An abstract type that represents an ensemble of configurations (i.e. spins, boso
 
 # Interface (required)
 - eachConfig(X::AbstractWalkerEnsemble): iterate over the configurations of the ensemble.
-- getWeights(X::AbstractWalkerEnsemble): get the weights of the configurations in the ensemble.
+- getWalkerWeights(X::AbstractWalkerEnsemble): get the weights of the configurations in the ensemble.
 - getBuffers(X::AbstractWalkerEnsemble): get the buffers associated with the configurations in the ensemble.
 - getReconfigurationList(X::AbstractWalkerEnsemble): get the reconfiguration list associated with the ensemble.
 # Interface (optional)
@@ -13,7 +13,8 @@ An abstract type that represents an ensemble of configurations (i.e. spins, boso
 abstract type AbstractWalkerEnsemble end
 
 function getConfigs end
-function getWeights end
+function getWalkerWeights end
+function getWeightLists end
 function getBuffers end
 function getReconfigurationList end
 NWalkers(X::AbstractWalkerEnsemble) = length(getConfigs(X))
