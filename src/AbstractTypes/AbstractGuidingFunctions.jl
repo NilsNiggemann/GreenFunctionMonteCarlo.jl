@@ -37,23 +37,36 @@ end
 function get_params end
 # HDF5.h5write(file::AbstractString,name::AbstractString,logψ::AbstractGuidingFunction) = throw(MethodError(h5write, (file,name,logψ)))
 
-allocate_GWF_buffers(logψ::AbstractGuidingFunction, NBuffers::Integer) = fill(EmptyGWFBuffer(),NBuffers)
+"""
+    allocate_GWF_buffers(logψ::AbstractGuidingFunction, NBuffers::Integer, x)
 
-compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer,logψ::AbstractGuidingFunction,x) = nothing
+Allocates a specified number of guiding wave function (GWF) buffers.
 
-function compute_GWF_buffers!(Walkers::AbstractWalkerEnsemble,logψ::AbstractGuidingFunction)
+# Arguments
+- `logψ::AbstractGuidingFunction`: The guiding function for which the buffers are being allocated.
+- `NBuffers::Integer`: The number of buffers to allocate.
+- `x`: An exemplary configuration
+
+# Returns
+- An array filled with `NBuffers` instances of `AbstractGuidingFunctionBuffer`. Defaults to an array of `EmptyGWFBuffer` instances.
+"""
+allocate_GWF_buffers(logψ::AbstractGuidingFunction, x, NBuffers::Integer) = fill(EmptyGWFBuffer(),NBuffers)
+
+compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer,x,logψ::AbstractGuidingFunction) = Buffer
+
+function compute_GWF_buffers!(Walkers::AbstractWalkerEnsemble,logψ::AbstractGuidingFunction,x)
     Buffers = getBuffers(Walkers)
     X = getConfigs(Walkers)
     Threads.@threads for i in eachindex(Buffers,X)
         compute_GWF_buffer!(Buffers[i],X[i],logψ)
     end
-    return nothing
+    return Buffers
 end
 
 function pre_move_affect!(Buffer::AbstractGuidingFunctionBuffer,x,dx,logψ::AbstractGuidingFunction)
-    return nothing
+    return Buffer
 end
 
 function post_move_affect!(Buffer::AbstractGuidingFunctionBuffer,x,dx,logψ::AbstractGuidingFunction)
-    return nothing
+    return Buffer
 end

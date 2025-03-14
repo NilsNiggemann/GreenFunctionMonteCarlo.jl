@@ -6,6 +6,7 @@ module GreenFunctionMonteCarlo
     import SparseArrays
     import StaticArrays as SA
     import RecursiveArrayTools
+    import StatsBase
 
     include("AbstractTypes/AbstractTypes.jl")
 
@@ -14,6 +15,9 @@ module GreenFunctionMonteCarlo
 
     include("Variational/EqualWeightSuperposition.jl")
     
+    include("DefaultFormalism/BosonicConfig.jl")
+    export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, fulfills_constraint
+
     include("DefaultFormalism/LocalOperator.jl")
     include("DefaultFormalism/ManyWalkerGFMC.jl")
     include("DefaultFormalism/ContinuousTimePropagator.jl")
