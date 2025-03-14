@@ -11,6 +11,9 @@ module GreenFunctionMonteCarlo
     include("AbstractTypes/AbstractTypes.jl")
 
     export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem
+
+    export ZeroDiagOperator
+
     export propagateWalkers!, fulfills_constraints, InverseMove, apply!
 
     include("Variational/EqualWeightSuperposition.jl")
@@ -19,6 +22,7 @@ module GreenFunctionMonteCarlo
     export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, fulfills_constraint
 
     include("DefaultFormalism/LocalOperator.jl")
+    export LocalOperator, localOperator
     include("DefaultFormalism/ManyWalkerGFMC.jl")
     include("DefaultFormalism/ContinuousTimePropagator.jl")
 end # module
