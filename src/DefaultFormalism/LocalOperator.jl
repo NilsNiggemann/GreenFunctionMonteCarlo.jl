@@ -5,9 +5,17 @@ struct SparseMove{T} <: AbstractMove
 end
 
 
-@inline apply!(x::AbstractConfig, move::SparseMove) = x .+= move.dx
+@inline function apply!(x::AbstractConfig, move::SparseMove)
+    for i in move.dx.nzind
+        x[i] += move.dx[i]
+    end
+end
 @inline apply_inverse!(x::AbstractConfig, move::SparseMove) = x .-= move.dx
-@inline apply!(x::AbstractConfig{Bool}, move::SparseMove{Bool}) = x .= x .⊻ move.dx
+@inline function apply!(x::AbstractConfig{Bool}, move::SparseMove{Bool})
+    for i in move.dx.nzind
+        x[i] != x[i]
+    end
+end
 @inline apply_inverse!(x::AbstractConfig{Bool}, move::SparseMove{Bool}) = apply!(x, move)
 struct LocalOperator{MoveType,T,DiagType} <: AbstractSignFreeOperator
     moves::Vector{MoveType}
