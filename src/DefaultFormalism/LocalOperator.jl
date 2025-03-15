@@ -4,7 +4,6 @@ struct SparseMove{T} <: AbstractMove
     dx::SparseArrays.SparseVector{T,Int}
 end
 
-
 @inline function apply!(x::AbstractConfig, move::SparseMove)
     for i in move.dx.nzind
         x[i] += move.dx[i]
@@ -13,7 +12,7 @@ end
 @inline apply_inverse!(x::AbstractConfig, move::SparseMove) = x .-= move.dx
 @inline function apply!(x::AbstractConfig{Bool}, move::SparseMove{Bool})
     for i in move.dx.nzind
-        x[i] != x[i]
+        x[i] = !x[i]
     end
 end
 @inline apply_inverse!(x::AbstractConfig{Bool}, move::SparseMove{Bool}) = apply!(x, move)
