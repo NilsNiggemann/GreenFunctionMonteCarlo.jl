@@ -9,6 +9,7 @@ This type is a subtype of `AbstractArray{T,N}`.
 
 # Interface
 - `Base.parent(x::AbstractConfig)`: return the parent array
+- Base.copy(x::AbstractConfig): create a full copy of the configuration
 - apply!(x::AbstractConfig, move::Any): apply a move to the configuration
 - fulfills_constraints(x::AbstractConfig, HilbertSpace::AbstractHilbertSpace): check if the configuration satisfies the constraints of the Hilbert space
 """
@@ -32,7 +33,6 @@ Base.IndexStyle(A::AbstractConfig) = IndexStyle(parent(A))
 Base.setindex!(A::AbstractConfig, v, i::Int) = setindex!(parent(A), v, i)
 Base.setindex!(A::AbstractConfig, v, I::Vararg{Int,N}) where N = setindex!(parent(A), v, I...)
 Base.setindex!(A, X, I...) = setindex!(parent(A), X, I...)
-
 """
     fulfills_constraints(x::AbstractConfig, HilbertSpace::AbstractHilbertSpace)
 

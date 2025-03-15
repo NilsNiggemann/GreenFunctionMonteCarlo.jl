@@ -66,3 +66,19 @@ end
         @test config_Bin == Bool[1,0,1]
     end
 end
+
+##
+@testset "Bosonic Walker Ensemble Tests" begin
+    Hilbert = BosonHilbertSpace(10, (OccupationNumberConstraint(0, 1),))
+    config = BosonConfig(zeros(UInt8, 10))
+    ensemble = GFMC.allocate_walkerEnsemble(config,GFMC.EqualWeightSuperposition(),10,3)
+
+    @testset "Walker Ensemble Construction" begin
+        @test length(ensemble.Configs) == 10
+        @test length(ensemble.WalkerWeights) == 10
+        @test length(ensemble.MoveWeights) == 10
+        @test length(ensemble.Buffers) == 10
+        @test all(length.(ensemble.MoveWeights) .== 3)
+    end
+
+end

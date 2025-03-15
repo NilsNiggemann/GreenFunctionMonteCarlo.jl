@@ -20,9 +20,10 @@ module GreenFunctionMonteCarlo
     
     include("DefaultFormalism/BosonicConfig.jl")
     export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, fulfills_constraint
-
+    include("DefaultFormalism/WalkerEnsemble.jl")
+    
     include("DefaultFormalism/LocalOperator.jl")
-    export LocalOperator, localOperator
+    export LocalOperator, localOperator, SparseMove
     include("DefaultFormalism/ManyWalkerGFMC.jl")
     include("DefaultFormalism/ContinuousTimePropagator.jl")
 end # module

@@ -8,7 +8,7 @@ struct BosonConfig{T,N,Arr<:AbstractArray{T,N}} <: AbstractConfig{T,N}
 end
 
 Base.parent(x::BosonConfig) = x.data
-
+Base.copy(x::BosonConfig) = BosonConfig(copy(x.data))
 struct OccupationNumberConstraint <: AbstractConstraint
     min_occupation::Int
     max_occupation::Int
