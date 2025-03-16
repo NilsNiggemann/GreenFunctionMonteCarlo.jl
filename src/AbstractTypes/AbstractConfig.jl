@@ -33,19 +33,3 @@ Base.IndexStyle(A::AbstractConfig) = IndexStyle(parent(A))
 Base.setindex!(A::AbstractConfig, v, i::Int) = setindex!(parent(A), v, i)
 Base.setindex!(A::AbstractConfig, v, I::Vararg{Int,N}) where N = setindex!(parent(A), v, I...)
 Base.setindex!(A, X, I...) = setindex!(parent(A), X, I...)
-"""
-    fulfills_constraints(x::AbstractConfig, HilbertSpace::AbstractHilbertSpace)
-
-Check if the given configuration `x` satisfies the constraints of the specified `HilbertSpace`.
-
-# Arguments
-- `x::AbstractConfig`: The configuration to be checked.
-- `HilbertSpace::AbstractHilbertSpace`: The Hilbert space whose constraints need to be satisfied.
-
-# Returns
-- `Bool`: `true` if the configuration satisfies the constraints, `false` otherwise.
-"""
-function fulfills_constraints(x::AbstractConfig,HilbertSpace::AbstractHilbertSpace)
-    constraints = constraints(HilbertSpace)
-    return all(c(x) for c in constraints)
-end

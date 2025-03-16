@@ -7,7 +7,8 @@ module GreenFunctionMonteCarlo
     import StaticArrays as SA
     import RecursiveArrayTools
     import StatsBase
-
+    import ChunkSplitters
+    
     include("AbstractTypes/AbstractTypes.jl")
 
     export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem

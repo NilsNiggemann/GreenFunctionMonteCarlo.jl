@@ -21,3 +21,6 @@ function get_markov_weights!(weights::AbstractVector,x::AbstractConfig,H::Abstra
 
     return weights
 end
+
+getLocalEnergy(weights::AbstractVector) = -sum(weights)
+getLocalEnergy(x::AbstractConfig,weights::AbstractVector,Hxx::DiagonalOperator) = getLocalEnergy(weights) + Hxx(x)
