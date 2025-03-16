@@ -4,6 +4,7 @@
 An abstract type representing a general operator. This serves as a base type for defining various specific operators in the context of the Green Function Monte Carlo project.
 """
 abstract type AbstractOperator end
+
 abstract type OffdiagonalOperator end
 
 """
@@ -43,6 +44,20 @@ function get_offdiagonal_elements end
 
 function get_diagonal end
 
+"""
+    AbstractMove
+
+Abstract type representing a move, i.e. an operation that changes a configuration x to a new configuration x'.
+
+Abstract type representing a move operation in the context of Green Function Monte Carlo simulations.
+
+This abstract type serves as a base for defining various move operations that can be performed
+during the simulation process. Specific move types should inherit from this abstract type
+and implement the required functionality.
+# Interface
+- `apply!(x::AbstractConfig, move::AbstractMove)`: Apply the move to the configuration `x`.
+- `isapplicable(x::AbstractConfig, move::AbstractMove, HilbertSpace::AbstractHilbertSpace)`: Check if the move is applicable to the configuration `x` within the specified `HilbertSpace`.
+"""
 abstract type AbstractMove end
 
 """
@@ -89,11 +104,30 @@ Check if a given move is applicable to the current configuration within a specif
 Defaults to applying the move to the configuration, checking if the constraints are satisfied, and then reverting the move.
 
 Make sure to implement this function for specific subtypes of `AbstractConfig` and `AbstractHilbertSpace` to ensure optimal performance.
+See also `isapplicable(x::AbstractConfig, move::AbstractMove, constraint::AbstractConstraint)`.
 """
 function isapplicable(x::AbstractConfig, move::AbstractMove, HilbertSpace::AbstractHilbertSpace)
+    c = constraint(HilbertSpace)
+    return isapplicable(x, move, c)
+end
+
+"""
+    isapplicable(x::AbstractConfig, move::AbstractMove, constraint::AbstractConstraint) -> Bool
+
+Check if a given move is applicable to a configuration under a specified constraint.
+
+# Arguments
+- `x::AbstractConfig`: The configuration to which the move will be applied.
+- `move::AbstractMove`: The move that is being checked for applicability.
+- `constraint::AbstractConstraint`: The constraint that must be satisfied for the move to be applicable.
+
+# Returns
+- `Bool`: `true` if the move is applicable to the configuration under the given constraint, `false` otherwise.
+"""
+function isapplicable(x::AbstractConfig, move::AbstractMove, constraint::AbstractConstraint)
     apply!(x, move)
-    result = fulfills_constraints(x, HilbertSpace)
+    result = constraint(x)
     apply_inverse!(x, move)
     return result
 end
-
+isapplicable(x::AbstractConfig, move::AbstractMove, constraint::NoConstraint) = true

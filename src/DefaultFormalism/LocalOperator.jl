@@ -1,4 +1,5 @@
 struct ZeroDiagOperator <: AbstractOperator end
+ZeroDiagOperator(x::AbstractConfig) = 0.
 
 struct SparseMove{T} <: AbstractMove
     dx::SparseArrays.SparseVector{T,Int}
@@ -22,6 +23,8 @@ struct LocalOperator{MoveType,T,DiagType} <: AbstractSignFreeOperator
     diag::DiagType
 end
 @inline get_move(O::LocalOperator{<:Any},idx::Integer) = O.moves[idx]
+
+isapplicable(x::AbstractConfig{Bool}, move::SparseMove{Bool}, c::HardCoreConstraint) = true
 
 _move_type(::LocalOperator{MoveType}) where {MoveType} = MoveType
 

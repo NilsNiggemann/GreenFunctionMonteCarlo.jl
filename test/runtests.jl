@@ -5,12 +5,13 @@ using Random
 using SparseArrays
 ##
 @testset "Bosonic Configuration Tests" begin
-    Hilbert = BosonHilbertSpace(10, (OccupationNumberConstraint(0, 1),))
+    Hilbert = BosonHilbertSpace(10, OccupationNumberConstraint(0, 1))
 
-    config = BosonConfig(zeros(UInt8,10))
+    config = BosonConfig(Hilbert)
     
     @testset "UInt8 Variables" begin
         @test size(config) === (10,)
+        @test config == BosonConfig(zeros(UInt8,10))
         @test fulfills_constraint(config, Hilbert)
         rand!(config)
         @test !fulfills_constraint(config, Hilbert)
@@ -28,9 +29,16 @@ using SparseArrays
         end
     end
 
+    @testset "HardCoreConstraint" begin
+        Hilbert = BosonHilbertSpace(10, HardCoreConstraint())
+        config = BosonConfig(Hilbert)
+        @test fulfills_constraint(config, Hilbert)
+        rand!(config)
+        @test fulfills_constraint(config, Hilbert)
+    end
 end
-
 ##
+
 
 @testset "Sparse Move Tests" begin
     moves = sparse(Int8[
@@ -69,10 +77,17 @@ end
 
 ##
 @testset "Bosonic Walker Ensemble Tests" begin
-    Hilbert = BosonHilbertSpace(10, (OccupationNumberConstraint(0, 1),))
-    config = BosonConfig(zeros(UInt8, 10))
+    Hilbert = BosonHilbertSpace(10, HardCoreConstraint())
+    config = BosonConfig(zeros(Bool, 10))
     ensemble = GFMC.allocate_walkerEnsemble(config,GFMC.EqualWeightSuperposition(),10,3)
 
+    CT = ContinuousTimePropagator(0.1)
+
+    H = localOperator(sparse(Bool[
+        0 1 1;
+        1 1 1;
+        0 0 1;
+    ]'), [0.5, 0.5, 0.2], ZeroDiagOperator())
     @testset "Walker Ensemble Construction" begin
         @test length(ensemble.Configs) == 10
         @test length(ensemble.WalkerWeights) == 10

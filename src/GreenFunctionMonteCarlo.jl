@@ -14,16 +14,18 @@ module GreenFunctionMonteCarlo
 
     export ZeroDiagOperator
 
-    export propagateWalkers!, fulfills_constraints, InverseMove, apply!
+    export propagateWalkers!, fulfills_constraint, InverseMove, apply!
 
     include("Variational/EqualWeightSuperposition.jl")
     
     include("DefaultFormalism/BosonicConfig.jl")
-    export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, fulfills_constraint
+    export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, HardCoreConstraint, fulfills_constraint
+
     include("DefaultFormalism/WalkerEnsemble.jl")
     
     include("DefaultFormalism/LocalOperator.jl")
     export LocalOperator, localOperator, SparseMove
     include("DefaultFormalism/ManyWalkerGFMC.jl")
     include("DefaultFormalism/ContinuousTimePropagator.jl")
+    export ContinuousTimePropagator
 end # module
