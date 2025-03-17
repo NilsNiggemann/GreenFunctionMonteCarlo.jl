@@ -3,12 +3,14 @@ Green function Monte Carlo is a method to sample from the ground state of sign-p
 """
 module GreenFunctionMonteCarlo
 
+    import Random
     import SparseArrays
     import StaticArrays as SA
     import RecursiveArrayTools
     import StatsBase
     import ChunkSplitters
-    
+    import SmallCollections
+
     include("AbstractTypes/AbstractTypes.jl")
 
     export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem

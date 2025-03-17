@@ -2,8 +2,9 @@ using GreenFunctionMonteCarlo
 import GreenFunctionMonteCarlo as GFMC
 using Test
 using Random
-using SparseArrays
+using StableRNGs
 ##
+
 @testset "Bosonic Configuration Tests" begin
     Hilbert = BosonHilbertSpace(10, OccupationNumberConstraint(0, 1))
 
@@ -41,22 +42,25 @@ end
 
 
 @testset "Sparse Move Tests" begin
-    moves = sparse(Int8[
-        0 -1 1;
-        0 1 -1;
-        1 0 1;
-        -1 0 -1;
-    ]')
-    moves_binary = sparse(Bool[
-        0 1 1;
-        1 0 1;
-    ]')
+    moves = [
+        Int8[0,-1,1],
+        Int8[0,1,-1],
+        Int8[1,0,1],
+        Int8[-1,0,-1],
+    ]
 
-    weights = [0.5, 0.5, 0.2,0.2]
-    weights_bin = [0.5, 0.2]
+    moves_binary = [
+        Bool[0,1,1],
+        Bool[1,0,1]
+    ]
+
+    weights = -[0.5, 0.5, 0.2,0.2]
+    weights_bin = -[0.5, 0.2]
+    
+    Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
 
     diag = ZeroDiagOperator()
-    local_op = localOperator(moves, weights, diag)
+    local_op = localOperator(moves, weights, diag, Hilbert)
 
     config = BosonConfig(UInt8[1,1,0])
     config_Bin = BosonConfig(Bool[1,1,0])
@@ -68,7 +72,7 @@ end
     end
 
     @testset "SparseMoveBinary" begin
-        local_op_binary = localOperator(moves_binary, weights_bin, diag)
+        local_op_binary = localOperator(moves_binary, weights_bin, diag, Hilbert)
         move_binary = GFMC.get_move(local_op_binary, 1)
         GFMC.apply!(config_Bin, move_binary)
         @test config_Bin == Bool[1,0,1]
@@ -76,24 +80,51 @@ end
 end
 
 ##
+
 @testset "Bosonic Walker Ensemble Tests" begin
-    Hilbert = BosonHilbertSpace(10, HardCoreConstraint())
-    config = BosonConfig(zeros(Bool, 10))
-    ensemble = GFMC.allocate_walkerEnsemble(config,GFMC.EqualWeightSuperposition(),10,3)
-
-    CT = ContinuousTimePropagator(0.1)
-
-    H = localOperator(sparse(Bool[
-        0 1 1;
-        1 1 1;
-        0 0 1;
-    ]'), [0.5, 0.5, 0.2], ZeroDiagOperator())
+    Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
+    config = BosonConfig(Hilbert)
+    logψ = GFMC.EqualWeightSuperposition()
+    
+    CT = ContinuousTimePropagator(1.)
+    
+    H = localOperator(
+        [
+            Bool[0,1,1],
+            Bool[0,0,1],
+            Bool[0,1,0],
+            Bool[1,1,0],
+            ]
+    , -[0.5, 0.3, 0.2 ,0.4], ZeroDiagOperator(), Hilbert)
+    
+    NumWalkers = 8
+    ensemble = GFMC.allocate_walkerEnsemble(config,logψ,NumWalkers,H)
+    
     @testset "Walker Ensemble Construction" begin
-        @test length(ensemble.Configs) == 10
-        @test length(ensemble.WalkerWeights) == 10
-        @test length(ensemble.MoveWeights) == 10
-        @test length(ensemble.Buffers) == 10
-        @test all(length.(ensemble.MoveWeights) .== 3)
+        @test length(ensemble.Configs) == NumWalkers
+        @test length(ensemble.WalkerWeights) == NumWalkers
+        @test length(ensemble.MoveWeights) == NumWalkers
+        @test length(ensemble.Buffers) == NumWalkers
+        @test all(length.(ensemble.MoveWeights) .== 4)
     end
-
+    
+    move_weights = GFMC.getMoveWeights(ensemble,1)
+    
+    GFMC.get_markov_weights!(move_weights, config, H, logψ, Hilbert, GFMC.getBuffer(ensemble, 1))
+    operator_weights = GFMC.get_offdiagonal_elements(H)
+    
+    @testset "Markov Weights" begin
+        @test all(>=(0), move_weights)
+        @test move_weights == -operator_weights
+    end
+    
+    RNG = StableRNG(1234)
+    GFMC.continuos_time_propagation!(ensemble, H, logψ, Hilbert, CT.dτ, 0.0, 1,RNG)
+    
+    AllConfs = stack(ensemble.Configs)
+    # println(AllConfs)
+    @testset "Continuous Time Propagation" begin
+        @test AllConfs == Bool[0 0 0 0 1 0 0 0; 1 0 1 0 1 1 0 1; 0 1 1 0 0 0 0 1]
+    end
+    
 end

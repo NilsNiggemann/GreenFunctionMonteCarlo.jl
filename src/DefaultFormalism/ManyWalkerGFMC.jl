@@ -10,17 +10,30 @@ getWalkerWeights(X::ManyWalkerEnsemble) = X.WalkerWeights
 getBuffer(X::ManyWalkerEnsemble,α) = X.Buffers[α]
 
 function get_markov_weights!(weights::AbstractVector,x::AbstractConfig,H::AbstractSignFreeOperator,logψ::AbstractGuidingFunction,Hilbert::AbstractHilbertSpace,Buffer::AbstractGuidingFunctionBuffer)
-    pre_move_affect!(Buffer,x,dx,logψ)
-    Hxy = get_offdiagonal_elements(H)
-    moves = get_moves(H)
+    pre_move_affect!(Buffer,x,logψ) 
+    _get_markov_weights!(weights,x,H,logψ,Hilbert,Buffer)
+end
+function get_markov_weights!(weights::AbstractVector,x::AbstractConfig,H::AbstractSignFreeOperator,logψ::AbstractGuidingFunction,Hilbert::AbstractHilbertSpace,::NotImplementedBuffer)
+    Buffer = logψ(x)
+    _get_markov_weights!(weights,x,H,logψ,Hilbert,Buffer)
+end
 
-    for i in eachindex(moves,weights)
-        ψx´_ψx = exp(log_psi_diff(x,moves[i],logψ,Buffer,Hilbert))
+function _get_markov_weights!(weights::AbstractVector,x::AbstractConfig,H::AbstractSignFreeOperator,logψ::AbstractGuidingFunction,Hilbert::AbstractHilbertSpace,Buffer)
+    Hxy = get_offdiagonal_elements(H)
+    for i in eachindex(weights)
+        move = get_move(H,i)
+        ψx´_ψx = exp(log_psi_diff(x,move,logψ,Buffer,Hilbert))
         weights[i] = - ψx´_ψx * Hxy[i]
     end
-
     return weights
 end
 
 getLocalEnergy(weights::AbstractVector) = -sum(weights)
 getLocalEnergy(x::AbstractConfig,weights::AbstractVector,Hxx::DiagonalOperator) = getLocalEnergy(weights) + Hxx(x)
+
+function performMarkovStep!(x::AbstractConfig,moveWeights::AbstractVector,H::AbstractSignFreeOperator,rng::Random.AbstractRNG)
+    moveidx = StatsBase.sample(rng,StatsBase.Weights(moveWeights))
+    move = get_move(H,moveidx)
+    apply!(x,move)
+    return move
+end

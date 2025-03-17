@@ -11,27 +11,27 @@ An abstract type for all guiding function implementations in Green Function Mont
 # Interface (optional)
 - allocate_GWF_buffers(logψ::AbstractGuidingFunction, NBuffers::Integer): allocate NBuffers instances of a buffer for the guiding function. Defaults to an array of EmptyGWFBuffer instances.
 - compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer, logψ::AbstractGuidingFunction, x): compute the full buffer for the guiding function at the configuration `x`. 
-- pre_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, dx, logψ::AbstractGuidingFunction): perform any necessary operations before the move is applied.
+- pre_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, moves, logψ::AbstractGuidingFunction): perform any necessary operations before computing ratios ψx´_ψx.
 - post_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, dx, logψ::AbstractGuidingFunction): perform any necessary operations after the move is applied.
 """
 abstract type AbstractGuidingFunction end
 abstract type AbstractGuidingFunctionBuffer end
 
 struct EmptyGWFBuffer <: AbstractGuidingFunctionBuffer end
+struct NotImplementedBuffer <: AbstractGuidingFunctionBuffer end
 
 function (logψ::AbstractGuidingFunction) end
 @inline (logψ::AbstractGuidingFunction)(x::AbstractArray,::AbstractHilbertSpace) = logψ(x)
 
-function log_psi_diff(x, dx,logψ::AbstractGuidingFunction, Buffer::AbstractGuidingFunctionBuffer,Hilbert::AbstractHilbertSpace)
-    logpsi = logψ(x)
-    apply_move!(x,dx)
+function log_psi_diff(x, dx::AbstractMove, logψ::AbstractGuidingFunction,logψx::AbstractFloat,Hilbert::AbstractHilbertSpace)
+    apply!(x,dx)
     if fulfills_constraint(x,Hilbert) 
         logpsi_new = logψ(x)
     else 
         logpsi_new = -Inf
     end
     apply_inverse!(x,dx)
-    return logpsi_new - logpsi
+    return logpsi_new - logψx
 end
 
 function get_params end
@@ -48,9 +48,9 @@ Allocates a specified number of guiding wave function (GWF) buffers.
 - `x`: An exemplary configuration
 
 # Returns
-- An array filled with `NBuffers` instances of `AbstractGuidingFunctionBuffer`. Defaults to an array of `EmptyGWFBuffer` instances.
+- An array filled with `NBuffers` instances of `AbstractGuidingFunctionBuffer`. Defaults to an array of `NotImplementedBuffer` instances.
 """
-allocate_GWF_buffers(logψ::AbstractGuidingFunction, x, NBuffers::Integer) = fill(EmptyGWFBuffer(),NBuffers)
+allocate_GWF_buffers(logψ::AbstractGuidingFunction, x, NBuffers::Integer) = fill(NotImplementedBuffer(),NBuffers)
 
 compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer,x,logψ::AbstractGuidingFunction) = Buffer
 
@@ -63,7 +63,10 @@ function compute_GWF_buffers!(Walkers::AbstractWalkerEnsemble,logψ::AbstractGui
     return Buffers
 end
 
-function pre_move_affect!(Buffer::AbstractGuidingFunctionBuffer,x,dx,logψ::AbstractGuidingFunction)
+"""
+    Updates the guiding function buffer before any move is applied.
+"""
+function pre_move_affect!(Buffer::AbstractGuidingFunctionBuffer,x,logψ::AbstractGuidingFunction)
     return Buffer
 end
 

@@ -10,10 +10,11 @@ getMoveWeights(X::WalkerEnsemble, α) = X.MoveWeights[α]
 getWalkerWeights(X::WalkerEnsemble) = X.WalkerWeights
 getBuffer(X::WalkerEnsemble, α) = X.Buffers[α]
 
-function allocate_walkerEnsemble(conf::ConfType, logψ::AbstractGuidingFunction,NWalkers::Integer,numMoves::Integer) where {ConfType<:AbstractConfig}
+function allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::Integer,numMoves::Integer)
     configs = [copy(conf) for _ in 1:NWalkers]
     weights = zeros(NWalkers)
     move_weights = [zeros(numMoves) for _ in 1:NWalkers]
     buffers = allocate_GWF_buffers(logψ, conf, NWalkers)
     return WalkerEnsemble(configs, weights, move_weights, buffers)
 end
+allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::Integer,H::AbstractSignFreeOperator) = allocate_walkerEnsemble(conf, logψ, NWalkers, length(get_offdiagonal_elements(H)))
