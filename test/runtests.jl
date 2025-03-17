@@ -119,12 +119,13 @@ end
     end
     
     RNG = StableRNG(1234)
-    GFMC.continuos_time_propagation!(ensemble, H, logψ, Hilbert, CT.dτ, 0.0, 1,RNG)
+    GFMC.propagateWalkers!(ensemble, H, logψ, Hilbert, CT, 0.0, 1,RNG)
     
     AllConfs = stack(ensemble.Configs)
-    # println(AllConfs)
     @testset "Continuous Time Propagation" begin
         @test AllConfs == Bool[0 0 0 0 1 0 0 0; 1 0 1 0 1 1 0 1; 0 1 1 0 0 0 0 1]
+        GFMC.propagateWalkers!(ensemble, H, logψ, Hilbert, CT, 0.0, 1,RNG)
+        @test stack(ensemble.Configs) != AllConfs
     end
     
 end

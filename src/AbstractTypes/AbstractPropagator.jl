@@ -12,7 +12,7 @@ abstract type AbstractPropagator end
 
 """ Propagates walker ensemble `X` using a collection of moves according to the rules specified by the propagator `P`. 
 
-# Usage:
-    `propagateWalkers!(X::AbstractWalkerEnsemble, moves, P::AbstractPropagator,params)`
+# Usage:    
+    propagateWalkers!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, prop::AbstractPropagator, w_avg_estimate::Real, parallelizer::AbstractParallelizationScheme, RNG::Random.AbstractRNG = Random.default_rng())
 """
 function propagateWalkers! end

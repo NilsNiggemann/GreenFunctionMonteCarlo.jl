@@ -3,6 +3,8 @@ struct ContinuousTimePropagator{T<:AbstractFloat} <: AbstractPropagator
 end
 ContinuousTimePropagator(dτ::Real) = ContinuousTimePropagator(float(dτ))
 
+@inline propagateWalkers!(WE::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,logψ::AbstractGuidingFunction,Hilbert::AbstractHilbertSpace,propagator::ContinuousTimePropagator,w_avg_estimate::Real,parallelization::MultiThreaded, RNG::Random.AbstractRNG = Random.default_rng()) = continuos_time_propagation!(WE,H,logψ,Hilbert,propagator.dτ,w_avg_estimate,parallelization,RNG)
+
 """
     continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, nWorkChunks::Integer, RNG::Random.AbstractRNG = Random.default_rng())
 
@@ -18,10 +20,10 @@ Perform continuous time propagation on a walker ensemble for a fixed time step `
 - `nWorkChunks::Integer`: The number of work chunks for parallel processing.
 - `RNG::Random.AbstractRNG`: The random number generator to be used (default is `Random.default_rng()`).
 """
-function continuos_time_propagation!(WE::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,logψ::AbstractGuidingFunction,Hilbert::AbstractHilbertSpace,dτ::Real,w_avg_estimate::Real,nWorkChunks::Integer, RNG::Random.AbstractRNG = Random.default_rng())
+function continuos_time_propagation!(WE::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,logψ::AbstractGuidingFunction,Hilbert::AbstractHilbertSpace,dτ::Real,w_avg_estimate::Real,parallelization::MultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
     
     WalkerWeights = getWalkerWeights(WE)
-    batches = ChunkSplitters.chunks(eachindex(WalkerWeights), n = nWorkChunks)
+    batches = ChunkSplitters.chunks(eachindex(WalkerWeights), n = parallelization.nWorkChunks)
 
     Hxx = get_diagonal(H)
     @sync for (i_chunk,αinds) in enumerate(batches)
@@ -61,4 +63,3 @@ function continuos_time_propagation!(WE::AbstractWalkerEnsemble,H::AbstractSignF
     end
     
 end
-

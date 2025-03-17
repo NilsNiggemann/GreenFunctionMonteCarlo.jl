@@ -3,12 +3,14 @@ struct WalkerEnsemble{ConfType<:AbstractConfig,GWB<:AbstractGuidingFunctionBuffe
     WalkerWeights::Vector{Float64}
     MoveWeights::Vector{Vector{Float64}}
     Buffers::Vector{GWB}
+    reconfigurationList::Vector{Int}
 end
 
 getConfig(X::WalkerEnsemble, α) = X.Configs[α]
 getMoveWeights(X::WalkerEnsemble, α) = X.MoveWeights[α]
 getWalkerWeights(X::WalkerEnsemble) = X.WalkerWeights
 getBuffer(X::WalkerEnsemble, α) = X.Buffers[α]
+getReconfigurationList(X::WalkerEnsemble) = X.reconfigurationList
 
 function allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::Integer,numMoves::Integer)
     configs = [copy(conf) for _ in 1:NWalkers]

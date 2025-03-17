@@ -7,3 +7,5 @@ include("AbstractGuidingFunctions.jl")
 include("AbstractPropagator.jl")
 include("AbstractObservables.jl")
 include("AbstractGFMCProblem.jl")
+
+include("AbstractParallelizationScheme.jl")

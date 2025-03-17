@@ -10,10 +10,14 @@ module GreenFunctionMonteCarlo
     import StatsBase
     import ChunkSplitters
     import SmallCollections
+    import HDF5
+
+    include("utils.jl")
+    export createMMapArray, readMMapArray
 
     include("AbstractTypes/AbstractTypes.jl")
-
-    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem
+    
+    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObservables
 
     export ZeroDiagOperator
 
@@ -28,7 +32,11 @@ module GreenFunctionMonteCarlo
     
     include("DefaultFormalism/LocalOperator.jl")
     export LocalOperator, localOperator, SparseMove
+    include("DefaultFormalism/ConfigObservables.jl")
+
     include("DefaultFormalism/ManyWalkerGFMC.jl")
+
     include("DefaultFormalism/ContinuousTimePropagator.jl")
+    
     export ContinuousTimePropagator
 end # module
