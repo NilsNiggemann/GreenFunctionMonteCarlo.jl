@@ -17,6 +17,7 @@ function allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::
     weights = zeros(NWalkers)
     move_weights = [zeros(numMoves) for _ in 1:NWalkers]
     buffers = allocate_GWF_buffers(logψ, conf, NWalkers)
-    return WalkerEnsemble(configs, weights, move_weights, buffers)
+    reconfigurationList = zeros(Int, NWalkers)
+    return WalkerEnsemble(configs, weights, move_weights, buffers, reconfigurationList)
 end
 allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::Integer,H::AbstractSignFreeOperator) = allocate_walkerEnsemble(conf, logψ, NWalkers, length(get_offdiagonal_elements(H)))

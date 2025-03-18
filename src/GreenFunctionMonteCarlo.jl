@@ -23,6 +23,8 @@ module GreenFunctionMonteCarlo
 
     export propagateWalkers!, fulfills_constraint, InverseMove, apply!
 
+    export SingleThreaded, MultiThreaded
+    
     include("Variational/EqualWeightSuperposition.jl")
     
     include("DefaultFormalism/BosonicConfig.jl")
