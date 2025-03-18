@@ -6,7 +6,7 @@
 GreenFunctionMonteCarlo.GreenFunctionMonteCarlo
 GreenFunctionMonteCarlo.isapplicable
 GreenFunctionMonteCarlo.get_offdiagonal_elements
-GreenFunctionMonteCarlo.AbstractObservables
+GreenFunctionMonteCarlo.AbstractObserver
 GreenFunctionMonteCarlo.InverseMove
 GreenFunctionMonteCarlo.AbstractPropagator
 GreenFunctionMonteCarlo.get_move
