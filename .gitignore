@@ -7,3 +7,5 @@
 /docs/Manifest.toml
 /test/coverage/Manifest.toml
 /.vscode
+test/Manifest.toml
+test/Project.toml
