@@ -152,7 +152,7 @@ end
 
     @testset "runGFMC" begin
         prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
-        obs = NoObservables()
+        obs = NoObserver()
         runGFMC!(prob, obs, 10, RNG)
         AllConfs = stack(prob.WE.Configs)
         @test AllConfs != zeros(Bool,3,NWalkers)

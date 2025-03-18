@@ -36,7 +36,7 @@ module GreenFunctionMonteCarlo
     export LocalOperator, localOperator, SparseMove
 
     include("DefaultFormalism/MinimalReconfiguration.jl")
-    include("DefaultFormalism/ConfigObservables.jl")
+    include("DefaultFormalism/ConfigObserver.jl")
 
     include("DefaultFormalism/ManyWalkerGFMC.jl")
     export NoObserver, runGFMC!, GFMCProblem
