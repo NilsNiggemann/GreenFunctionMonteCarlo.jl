@@ -157,4 +157,6 @@ end
         AllConfs = stack(prob.WE.Configs)
         @test AllConfs != zeros(Bool,3,NWalkers)
     end
+
+    
 end

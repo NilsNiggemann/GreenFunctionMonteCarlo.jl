@@ -17,7 +17,7 @@ module GreenFunctionMonteCarlo
 
     include("AbstractTypes/AbstractTypes.jl")
     
-    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObservables, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator
+    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator
 
     export ZeroDiagOperator
 
@@ -39,7 +39,7 @@ module GreenFunctionMonteCarlo
     include("DefaultFormalism/ConfigObservables.jl")
 
     include("DefaultFormalism/ManyWalkerGFMC.jl")
-    export NoObservables, runGFMC!, GFMCProblem
+    export NoObserver, runGFMC!, GFMCProblem
 
     include("DefaultFormalism/ContinuousTimePropagator.jl")
     

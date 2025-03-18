@@ -1,4 +1,4 @@
-struct ConfigSaver{DT<:AbstractFloat,T,T2} <: AbstractObservables
+struct ConfigSaver{DT<:AbstractFloat,T,T2} <: AbstractObserver
     energies::Vector{DT}
     SaveConfigs::T
     TotalWeights::Vector{DT}

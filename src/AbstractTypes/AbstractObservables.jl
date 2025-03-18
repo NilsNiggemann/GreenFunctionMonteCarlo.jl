@@ -4,7 +4,7 @@ Abstract supertype for observables in GFMC which are recorded during the run. Ob
 - saveObservables_before!(Observables,i,Walkers,propagator): Saves the observables for the given iteration `i` and walker ensemble `Walkers`.
 - saveObservables_after!(Observables,i,Walkers,propagator): Saves the observables for the given iteration `i` and walker ensemble `Walkers` after reconfiguration.
 """
-abstract type AbstractObservables end
+abstract type AbstractObserver end
 
 """
 Abstract supertype for observables which are diagonal in the computational basis and may be measured for free in GFMC. An observable must be a function that takes a configuration and returns an array.

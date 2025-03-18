@@ -6,7 +6,7 @@ include("AbstractReconfigurationScheme.jl")
 include("AbstractOperator.jl")
 include("AbstractGuidingFunctions.jl")
 include("AbstractPropagator.jl")
-include("AbstractObservables.jl")
+include("AbstractObserver.jl")
 include("AbstractGFMCProblem.jl")
 
 include("AbstractParallelizationScheme.jl")
