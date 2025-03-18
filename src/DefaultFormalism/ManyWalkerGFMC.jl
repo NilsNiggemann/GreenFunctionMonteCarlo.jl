@@ -56,28 +56,18 @@ function performMarkovStep!(x::AbstractConfig,moveWeights::AbstractVector,H::Abs
     return move
 end
 
-struct GFMCManyWalkerProblem{WE<:AbstractWalkerEnsemble,Prop<:AbstractPropagator,GF<:AbstractGuidingFunction,Hilbert<:AbstractHilbertSpace,Parallel<:AbstractParallelizationScheme} <: AbstractGFMCProblem
-    WE::WE
-    Propagator::Prop
-    logψ::GF
-    Hilbert::Hilbert
-    Parallelization::Parallel
-end
-
 struct NoObservables <: AbstractObservables end
-saveObservables_after!(::NoObservables,i,Walkers,propagator) = nothing
+saveObservables_before!(::NoObservables,i,Walkers,propagator,reconfigurations) = nothing
+saveObservables_after!(::NoObservables,i,Walkers,propagator,reconfigurations) = nothing
 
-function runGFMC!(WE::AbstractWalkerEnsemble,Observables::AbstractObservables,range,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,RNG::Random.AbstractRNG = Random.default_rng())
-    reconfigurationList = getReconfigurationList(WE)
+function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObservables,reconfiguration::AbstractReconfigurationScheme,range,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,RNG::Random.AbstractRNG)
     iter = 0
     for i in range
         iter += 1
-        propagateWalkers!(WE,H,logψ,Hilbert,propagator,parallelizer,RNG)
-        saveObservables_before!(Observables,i,Walkers,propagator)
-        if reconfigure
-            reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
-        end
-        saveObservables_after!(Observables,i,Walkers,propagator)
+        propagateWalkers!(Walkers,H,logψ,Hilbert,propagator,parallelizer,RNG)
+        saveObservables_before!(Observables,i,Walkers,propagator,reconfiguration)
+        reconfigurateWalkers!(Walkers,reconfiguration,RNG)
+        saveObservables_after!(Observables,i,Walkers,propagator,reconfiguration)
 
         if iter%1000 == 0 # recompute buffers only occasionally to avoid accumulation of floating point errors 
             fill_all_Buffers!(prob,nThreads)
@@ -86,4 +76,31 @@ function runGFMC!(WE::AbstractWalkerEnsemble,Observables::AbstractObservables,ra
     return Observables
 end
 
-runGFMC!(prob::GFMCManyWalkerProblem,range,w_avg_estimate) = runGFMC!(prob.WE,NoObservables(),range,prob.Propagator,prob.logψ,prob.Hilbert,prob.Parallelization,Random.default_rng())
+struct GFMCProblem{WE<:AbstractWalkerEnsemble,Prop<:AbstractPropagator,GF<:AbstractGuidingFunction,SFO<:AbstractSignFreeOperator,HS<:AbstractHilbertSpace,PS<:AbstractParallelizationScheme,RS<:AbstractReconfigurationScheme} <: AbstractGFMCProblem
+    WE::WE
+    Propagator::Prop
+    H::SFO
+    logψ::GF
+    Hilbert::HS
+    parallelization::PS
+    reconfiguration::RS
+end
+
+function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,logψ::AbstractGuidingFunction;parallelization = MultiThreaded(NWalkers))
+    WE = allocate_walkerEnsemble(config,logψ,NWalkers,H)
+    reconfiguration = MinimalReconfiguration(NWalkers)
+    return GFMCProblem(WE,prop,H,logψ,Hilbert,parallelization,reconfiguration)
+end
+
+function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator; H, Hilbert, logψ = nothing, logpsi = nothing,parallelization = MultiThreaded(NWalkers))
+    
+    if logψ !== nothing && logpsi !== nothing
+        throw(ArgumentError("Only one of `logψ` or `logpsi` can be specified."))
+    end
+
+    GWF = logψ !== nothing ? logψ : logpsi
+    return GFMCProblem(config,NWalkers,prop,H, Hilbert, GWF; parallelization)
+end
+
+runGFMC!(prob::GFMCProblem,Observables::AbstractObservables,range, rng = Random.default_rng()) = runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,rng)
+runGFMC!(prob::GFMCProblem,Observables::AbstractObservables,NSteps::Integer, rng = Random.default_rng()) = runGFMC!(prob,Observables,1:NSteps,rng)

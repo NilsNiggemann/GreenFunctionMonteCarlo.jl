@@ -130,3 +130,31 @@ end
     end
     
 end
+##
+@testset "main Usage" begin
+    
+    Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
+    config = BosonConfig(Hilbert)
+    rand!(config)
+    logψ = GFMC.EqualWeightSuperposition()
+    NWalkers = 10
+    CT = ContinuousTimePropagator(1.)
+    
+    RNG = StableRNG(1234)
+    H = localOperator(
+        [
+            Bool[0,1,1],
+            Bool[0,0,1],
+            Bool[0,1,0],
+            Bool[1,1,0],
+            ]
+    , -[0.5, 0.3, 0.2 ,0.4], ZeroDiagOperator(), Hilbert)
+
+    @testset "runGFMC" begin
+        prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+        obs = NoObservables()
+        runGFMC!(prob, obs, 10, RNG)
+        AllConfs = stack(prob.WE.Configs)
+        @test AllConfs != zeros(Bool,3,NWalkers)
+    end
+end

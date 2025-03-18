@@ -24,7 +24,7 @@ Perform continuous time propagation on a walker ensemble for a fixed time step `
 """
 function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::MultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
     
-    batches = ChunkSplitters.chunks(eachindex(WE), n = parallelization.nWorkChunks,split= ChunkSplitters.RoundRobin())
+    batches = ChunkSplitters.chunks(eachindex(WE), n = parallelization.nTasks,split= ChunkSplitters.RoundRobin())
 
     @sync for (i_chunk, αinds) in enumerate(batches)
         Threads.@spawn for α in αinds

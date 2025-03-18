@@ -15,6 +15,15 @@ An abstract type for all guiding function implementations in Green Function Mont
 - post_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, dx, logψ::AbstractGuidingFunction): perform any necessary operations after the move is applied.
 """
 abstract type AbstractGuidingFunction end
+
+"""
+    AbstractGuidingFunctionBuffer
+
+An abstract type that serves as a base for defining guiding function buffer structures. 
+
+# Interface
+- `setBuffer!(BA::AbstractGuidingFunctionBuffer, BB::AbstractGuidingFunctionBuffer)`: set the buffer `BA` to the values of the buffer `BB`.
+"""
 abstract type AbstractGuidingFunctionBuffer end
 
 struct EmptyGWFBuffer <: AbstractGuidingFunctionBuffer end
@@ -33,6 +42,9 @@ function log_psi_diff(x, dx::AbstractMove, logψ::AbstractGuidingFunction,logψx
     apply_inverse!(x,dx)
     return logpsi_new - logψx
 end
+
+setBuffer!(BA::EmptyGWFBuffer,BB::EmptyGWFBuffer) = BB
+setBuffer!(BA::NotImplementedBuffer,BB::NotImplementedBuffer) = BB
 
 function get_params end
 # HDF5.h5write(file::AbstractString,name::AbstractString,logψ::AbstractGuidingFunction) = throw(MethodError(h5write, (file,name,logψ)))

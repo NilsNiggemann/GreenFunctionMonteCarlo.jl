@@ -16,14 +16,14 @@ function update_energies_TotalWeights!(energies,TotalWeights,i,Walkers::Abstract
     return nothing
 end
 
-function saveObservables_before!(Observables::ConfigSaver,i,Walkers::AbstractWalkerEnsemble,propagator::AbstractPropagator)
+function saveObservables_before!(Observables::ConfigSaver,i,Walkers::AbstractWalkerEnsemble,propagator::AbstractPropagator,reconfiguration::AbstractReconfigurationScheme)
     energies = get_energies(Observables)
     TotalWeights = get_TotalWeights(Observables)
     update_energies_TotalWeights!(energies,TotalWeights,i,Walkers,propagator::AbstractPropagator)
     return nothing
 end
 
-function saveObservables_after!(Observables::ConfigSaver,i,Walkers::AbstractWalkerEnsemble,propagator::AbstractPropagator)
+function saveObservables_after!(Observables::ConfigSaver,i,Walkers::AbstractWalkerEnsemble,propagator::AbstractPropagator,reconfiguration::AbstractReconfigurationScheme)
     SaveConfigs = Observables.SaveConfigs
 
     for α in eachindex(Walkers)
