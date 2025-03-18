@@ -56,17 +56,28 @@ function performMarkovStep!(x::AbstractConfig,moveWeights::AbstractVector,H::Abs
     return move
 end
 
-function runGFMC!(WE::AbstractWalkerEnsemble,Observables::AbstractObservables,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,RNG::Random.AbstractRNG = Random.default_rng())
+struct GFMCManyWalkerProblem{WE<:AbstractWalkerEnsemble,Prop<:AbstractPropagator,GF<:AbstractGuidingFunction,Hilbert<:AbstractHilbertSpace,Parallel<:AbstractParallelizationScheme} <: AbstractGFMCProblem
+    WE::WE
+    Propagator::Prop
+    logψ::GF
+    Hilbert::Hilbert
+    Parallelization::Parallel
+end
+
+struct NoObservables <: AbstractObservables end
+saveObservables_after!(::NoObservables,i,Walkers,propagator) = nothing
+
+function runGFMC!(WE::AbstractWalkerEnsemble,Observables::AbstractObservables,range,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,RNG::Random.AbstractRNG = Random.default_rng())
     reconfigurationList = getReconfigurationList(WE)
     iter = 0
     for i in range
         iter += 1
-        propagateWalkers!(WE,H,logψ,Hilbert,propagator,w_avg_estimate,parallelizer,RNG)
-        updateEnergies!(Observables,i,Walkers,weights,method)
+        propagateWalkers!(WE,H,logψ,Hilbert,propagator,parallelizer,RNG)
+        saveObservables_before!(Observables,i,Walkers,propagator)
         if reconfigure
             reconfiguration!(Walkers,Guiding_function_buffer,reconfigurationList,reconfiguration_buffer,weights)
         end
-        saveObservables!(Observables,i,Walkers)
+        saveObservables_after!(Observables,i,Walkers,propagator)
 
         if iter%1000 == 0 # recompute buffers only occasionally to avoid accumulation of floating point errors 
             fill_all_Buffers!(prob,nThreads)
@@ -74,3 +85,5 @@ function runGFMC!(WE::AbstractWalkerEnsemble,Observables::AbstractObservables,pr
     end
     return Observables
 end
+
+runGFMC!(prob::GFMCManyWalkerProblem,range,w_avg_estimate) = runGFMC!(prob.WE,NoObservables(),range,prob.Propagator,prob.logψ,prob.Hilbert,prob.Parallelization,Random.default_rng())

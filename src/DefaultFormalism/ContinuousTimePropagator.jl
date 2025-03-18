@@ -1,12 +1,14 @@
 struct ContinuousTimePropagator{T<:AbstractFloat} <: AbstractPropagator 
     dτ::T
+    w_avg_estimate::T
 end
-ContinuousTimePropagator(dτ::Real) = ContinuousTimePropagator(float(dτ))
+ContinuousTimePropagator(dτ::Real,w_avg_estimate::Real) = ContinuousTimePropagator(float(dτ),float(w_avg_estimate))
+ContinuousTimePropagator(dτ::Real;w_avg_estimate=0.) = ContinuousTimePropagator(dτ,w_avg_estimate)
 
-@inline propagateWalkers!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, propagator::ContinuousTimePropagator, w_avg_estimate::Real, parallelization::AbstractParallelizationScheme, RNG::Random.AbstractRNG = Random.default_rng()) = continuos_time_propagation!(WE, H, logψ, Hilbert, propagator.dτ, w_avg_estimate, parallelization, RNG)
+@inline propagateWalkers!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, propagator::ContinuousTimePropagator, parallelization::AbstractParallelizationScheme, RNG::Random.AbstractRNG = Random.default_rng()) = continuos_time_propagation!(WE, H, logψ, Hilbert, propagator.dτ,propagator.w_avg_estimate, parallelization, RNG)
 
 """
-    continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::MultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
+    continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, parallelization::MultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
 
 Perform continuous time propagation on a walker ensemble for a fixed time step `dτ`.
 

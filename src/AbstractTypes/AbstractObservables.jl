@@ -1,13 +1,10 @@
 """
 Abstract supertype for observables in GFMC which are recorded during the run. Observables should always contain the table recording reconfiguration processes, the energies, and the total weights of each Markov step.
 # Interface: 
-- saveObservables_before!(Observables,i,Walkers): Saves the observables for the given iteration `i` and walker ensemble `Walkers`.
-- saveObservables_after!(Observables,i,Walkers): Saves the observables for the given iteration `i` and walker ensemble `Walkers` after reconfiguration.
+- saveObservables_before!(Observables,i,Walkers,propagator): Saves the observables for the given iteration `i` and walker ensemble `Walkers`.
+- saveObservables_after!(Observables,i,Walkers,propagator): Saves the observables for the given iteration `i` and walker ensemble `Walkers` after reconfiguration.
 """
 abstract type AbstractObservables end
-
-struct NoObservables <: AbstractObservables end
-saveObservables!(::NoObservables,i,Walkers) = nothing
 
 """
 Abstract supertype for observables which are diagonal in the computational basis and may be measured for free in GFMC. An observable must be a function that takes a configuration and returns an array.

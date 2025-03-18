@@ -4,6 +4,7 @@ struct ConfigSaver{DT<:AbstractFloat,T,T2} <: AbstractObservables
     TotalWeights::Vector{DT}
     reconfigurationTable::Matrix{Int}
 end
+
 get_reconfigurationTable(Observables::ConfigSaver) = Observables.reconfigurationTable
 get_energies(Observables::ConfigSaver) = Observables.energies
 get_TotalWeights(Observables::ConfigSaver) = Observables.TotalWeights
@@ -22,11 +23,12 @@ function saveObservables_before!(Observables::ConfigSaver,i,Walkers::AbstractWal
     return nothing
 end
 
-function saveObservables_after!(Observables::ConfigSaver,i,Walkers::AbstractWalkerEnsemble)
+function saveObservables_after!(Observables::ConfigSaver,i,Walkers::AbstractWalkerEnsemble,propagator::AbstractPropagator)
     SaveConfigs = Observables.SaveConfigs
 
     for α in eachindex(Walkers)
         SaveConfigs[:,α,i] .= getConfig(Config,α)
     end
+
     return nothing
 end
