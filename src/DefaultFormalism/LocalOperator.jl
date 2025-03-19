@@ -5,6 +5,8 @@ struct SparseMove{T,V1<:AbstractVector{Int},V2<:AbstractVector{T}} <: AbstractMo
     inds::V1
     vals::V2
 end
+@inline affected_sites(move::SparseMove) = move.inds
+@inline move_values(move::SparseMove,x::AbstractConfig) = move.vals
 
 @inline function apply!(x::AbstractConfig, move::SparseMove)
     for (i,dx) in zip(move.inds, move.vals)
@@ -20,6 +22,13 @@ end
 
 struct FlipMove{Vec} <: AbstractMove
     inds::Vec
+end
+
+@inline affected_sites(move::FlipMove) = move.inds
+@inline function move_values(move::FlipMove,x::AbstractConfig{Bool})
+    map(move.inds) do i
+        !x[i]
+    end
 end
 
 @inline function apply!(x::AbstractConfig{Bool}, move::FlipMove)

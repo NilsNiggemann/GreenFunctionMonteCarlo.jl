@@ -3,6 +3,7 @@ import GreenFunctionMonteCarlo as GFMC
 using Test
 using Random
 using StableRNGs
+import GreenFunctionMonteCarlo.SmallCollections as SC
 ##
 
 @testset "Bosonic Configuration Tests" begin
@@ -99,7 +100,14 @@ end
     
     NumWalkers = 8
     ensemble = GFMC.allocate_walkerEnsemble(config,logψ,NumWalkers,H)
-    
+    @testset "FlipMoves" begin
+        move = H.moves[1]
+        @test move === GFMC.FlipMove(SC.SmallVector{2,Int}((2,3)))
+
+        GFMC.move_values(H.moves[1],config) === SC.SmallVector{2,Bool}((1,1))
+        @test iszero(config)
+
+    end
     @testset "Walker Ensemble Construction" begin
         @test length(ensemble.Configs) == NumWalkers
         @test length(ensemble.WalkerWeights) == NumWalkers

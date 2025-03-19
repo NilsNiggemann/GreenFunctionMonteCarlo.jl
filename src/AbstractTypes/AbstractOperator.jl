@@ -57,6 +57,8 @@ and implement the required functionality.
 # Interface
 - `apply!(x::AbstractConfig, move::AbstractMove)`: Apply the move to the configuration `x`.
 - `isapplicable(x::AbstractConfig, move::AbstractMove, HilbertSpace::AbstractHilbertSpace)`: Check if the move is applicable to the configuration `x` within the specified `HilbertSpace`.
+- affected_sites(move::AbstractMove): Return the sites affected by the move.
+- move_values(move::AbstractMove,x::AbstractConfig): Return the values of the move applied to the configuration `x`. i.e. the change in x when the move is applied.
 """
 abstract type AbstractMove end
 
