@@ -104,7 +104,7 @@ end
         move = H.moves[1]
         @test move === GFMC.FlipMove(SC.SmallVector{2,Int}((2,3)))
 
-        GFMC.move_values(H.moves[1],config) === SC.SmallVector{2,Bool}((1,1))
+        GFMC.move_dx(H.moves[1],config) === SC.SmallVector{2,Bool}((1,1))
         @test iszero(config)
 
     end
