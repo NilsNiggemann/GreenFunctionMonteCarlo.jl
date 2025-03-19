@@ -163,7 +163,7 @@ end
 
     NSteps = 5
 
-    ConfSaverFile = GFMC.configObserver(outfile, config, NSteps,NWalkers)
+    ConfSaverFile = configObserver(outfile, config, NSteps,NWalkers)
 
     @testset "ConfigObserver" begin
 

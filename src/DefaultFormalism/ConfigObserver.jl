@@ -1,3 +1,15 @@
+"""
+    struct ConfigObserver{DT<:AbstractFloat,T} <: AbstractObserver
+
+Saves the configurations, energies, and weights of the walkers during the Monte Carlo simulation.
+
+# Type Parameters
+- `DT<:AbstractFloat`: The floating-point type used for numerical computations (e.g., `Float64` or `Float32`).
+- `T`: A generic type parameter representing additional data or configuration associated with the observer.
+
+# Usage
+This type is typically used internally within the framework to monitor and process configurations during the Monte Carlo simulation.
+"""
 struct ConfigObserver{DT<:AbstractFloat,T} <: AbstractObserver
     energies::Vector{DT}
     SaveConfigs::T
@@ -6,7 +18,7 @@ struct ConfigObserver{DT<:AbstractFloat,T} <: AbstractObserver
 end
 
 
-function configObserver(filename,config::AbstractConfig{T,N},NSteps::Integer,NWalkers::Integer) where {T,N}
+function ConfigObserver(filename,config::AbstractConfig{T,N},NSteps::Integer,NWalkers::Integer) where {T,N}
     confSize = size(config)
     energies = maybe_MMap_array(filename,"energies",Float64,(NSteps,))
     TotalWeights = maybe_MMap_array(filename,"TotalWeights",Float64,(NSteps,))
@@ -14,7 +26,7 @@ function configObserver(filename,config::AbstractConfig{T,N},NSteps::Integer,NWa
     SaveConfigs = maybe_MMap_array(filename,"SaveConfigs",T,(confSize...,NWalkers,NSteps))
     return ConfigObserver(energies,SaveConfigs,TotalWeights,reconfigurationTable)
 end
-configObserver(config::AbstractConfig,NSteps::Integer,NWalkers::Integer) = configObserver(nothing,config,NSteps,NWalkers)
+ConfigObserver(config::AbstractConfig,NSteps::Integer,NWalkers::Integer) = ConfigObserver(nothing,config,NSteps,NWalkers)
 
 get_reconfigurationTable(Observables::ConfigObserver) = Observables.reconfigurationTable
 get_energies(Observables::ConfigObserver) = Observables.energies

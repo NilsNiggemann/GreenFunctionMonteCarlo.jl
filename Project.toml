@@ -23,7 +23,7 @@ SmallCollections = "0.3"
 SparseArrays = "1"
 StableRNGs = "1"
 StaticArrays = "1"
-Statistics = "1.11.1"
+Statistics = "1"
 StatsBase = "0.34"
 julia = "1"
 
