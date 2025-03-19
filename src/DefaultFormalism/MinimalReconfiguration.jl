@@ -3,6 +3,7 @@ struct MinimalReconfiguration <: AbstractReconfigurationScheme
     reconfigurationBuffer::Vector{Float64}
 end
 MinimalReconfiguration(Nw::Int) = MinimalReconfiguration(zeros(Int,Nw),zeros(Nw))
+get_reconfigurationList(reconf::MinimalReconfiguration) = reconf.reconfigurationList
 
 """Performs an efficient reconfiguration of walkers. This reconfiguration will not remove walkers if they all have the same weight, which increases the efficiency as more walkers can contribute to the average.
 

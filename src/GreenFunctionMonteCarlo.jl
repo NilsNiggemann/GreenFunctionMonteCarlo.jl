@@ -11,7 +11,8 @@ module GreenFunctionMonteCarlo
     import ChunkSplitters
     import SmallCollections
     import HDF5
-
+    import Statistics
+    
     include("utils.jl")
     export createMMapArray, readMMapArray
 
@@ -37,7 +38,7 @@ module GreenFunctionMonteCarlo
 
     include("DefaultFormalism/MinimalReconfiguration.jl")
     include("DefaultFormalism/ConfigObserver.jl")
-
+    export ConfigObserver
     include("DefaultFormalism/ManyWalkerGFMC.jl")
     export NoObserver, runGFMC!, GFMCProblem
 

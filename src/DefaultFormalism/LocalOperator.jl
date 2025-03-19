@@ -1,4 +1,4 @@
-struct ZeroDiagOperator <: AbstractOperator end
+struct ZeroDiagOperator <: DiagonalOperator end
 (::ZeroDiagOperator)(x::AbstractConfig) = 0.
 
 struct SparseMove{T,V1<:AbstractVector{Int},V2<:AbstractVector{T}} <: AbstractMove

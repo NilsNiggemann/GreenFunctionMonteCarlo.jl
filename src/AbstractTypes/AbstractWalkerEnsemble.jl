@@ -19,8 +19,6 @@ function getMoveWeights end
 function getWalkerWeights end
 function getBuffer end
 Base.eachindex(WE::AbstractWalkerEnsemble) = eachindex(getWalkerWeights(WE))
-getNWalkers(WE::AbstractWalkerEnsemble) = eachindex(WE)
-
 NWalkers(X::AbstractWalkerEnsemble) = length(eachindex(X))
 
 

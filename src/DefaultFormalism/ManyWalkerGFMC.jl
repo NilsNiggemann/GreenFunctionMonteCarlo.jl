@@ -40,7 +40,7 @@ function getLocalEnergyWalkers_before(Walkers::AbstractWalkerEnsemble,Hxx::Diago
     num = 0.
     denom = 0.
     WalkerWeights = getWalkerWeights(Walkers)
-    for α in eachindex(WalkerWeights,Walkers)
+    for α in eachindex(Walkers)
         eloc = getLocalEnergy(Walkers,α,Hxx)
         num += WalkerWeights[α]*eloc
         denom += WalkerWeights[α]
@@ -65,9 +65,9 @@ function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,
     for i in range
         iter += 1
         propagateWalkers!(Walkers,H,logψ,Hilbert,propagator,parallelizer,RNG)
-        saveObservables_before!(Observables,i,Walkers,propagator,reconfiguration)
+        saveObservables_before!(Observables,i,Walkers,H,reconfiguration)
         reconfigurateWalkers!(Walkers,reconfiguration,RNG)
-        saveObservables_after!(Observables,i,Walkers,propagator,reconfiguration)
+        saveObservables_after!(Observables,i,Walkers,H,reconfiguration)
 
         if iter%1000 == 0 # recompute buffers only occasionally to avoid accumulation of floating point errors 
             fill_all_Buffers!(prob,nThreads)
