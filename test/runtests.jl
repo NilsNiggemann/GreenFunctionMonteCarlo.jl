@@ -139,6 +139,30 @@ end
     
 end
 ##
+function testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)
+    @testset "SaveConfigs" begin
+
+        @test size(SaveConfigs) == (NSites,NWalkers,NSteps)
+        @test eltype(SaveConfigs) == Bool
+        @test !iszero(SaveConfigs)
+    end
+    @testset "TotalWeights" begin
+        @test size(TotalWeights) == (NSteps,)
+        @test eltype(TotalWeights) == Float64
+        @test !iszero(TotalWeights)
+    end
+    @testset "energies" begin
+        @test size(energies) == (NSteps,)
+        @test eltype(energies) == Float64
+        @test !iszero(energies)
+    end
+    @testset "reconfigurationTable" begin
+        @test size(reconfigurationTable) == (NWalkers,NSteps)
+        @test eltype(reconfigurationTable) == Int
+        @test !iszero(reconfigurationTable)
+    end
+end
+
 function getExampleHardcore(Nsites,NMoves,rng)
     Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
 
@@ -184,37 +208,18 @@ end
         runGFMC!(prob, ConfSaverFile, NSteps, RNG)
 
         GFMC.HDF5.h5open(outfile, "r") do file
-            println(file)
-            println(keys(file))
-            @testset "SaveConfigs" begin
-                @test haskey(file, "SaveConfigs")
+            @test haskey(file, "SaveConfigs")
 
-                SaveConfigs = read(file["SaveConfigs"])
-                @test size(SaveConfigs) == (3,NWalkers,NSteps)
-                @test eltype(SaveConfigs) == Bool
-                @test !iszero(SaveConfigs)
-            end
-            @testset "TotalWeights" begin
-                @test haskey(file, "TotalWeights")
-                TotalWeights = read(file["TotalWeights"])
-                @test size(TotalWeights) == (NSteps,)
-                @test eltype(TotalWeights) == Float64
-                @test !iszero(TotalWeights)
-            end
-            @testset "energies" begin
-                @test haskey(file, "energies")
-                energies = read(file["energies"])
-                @test size(energies) == (NSteps,)
-                @test eltype(energies) == Float64
-                @test !iszero(energies)
-            end
-            @testset "reconfigurationTable" begin
-                @test haskey(file, "reconfigurationTable")
-                reconfigurationTable = read(file["reconfigurationTable"])
-                @test size(reconfigurationTable) == (NWalkers,NSteps)
-                @test eltype(reconfigurationTable) == Int
-                @test !iszero(reconfigurationTable)
-            end
+            SaveConfigs = read(file["SaveConfigs"])
+
+            @test haskey(file, "TotalWeights")
+            TotalWeights = read(file["TotalWeights"])
+            @test haskey(file, "energies")
+            energies = read(file["energies"])
+            @test haskey(file, "reconfigurationTable")
+            reconfigurationTable = read(file["reconfigurationTable"])
+
+            testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,3,NWalkers,NSteps)
         end
     end
 end
@@ -259,5 +264,19 @@ end
 
     @testset "Wavefunction Ratio" begin
         TestWFRatio(logψ,config,H,Hilbert)
+    end
+    
+    
+    @testset "run Jastrow" begin
+        NWalkers = 10
+        NSteps = 5
+        CT = ContinuousTimePropagator(1.)
+        prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+    
+        ConfSaverFile = ConfigObserver(config, NSteps,NWalkers)
+    
+        runGFMC!(prob, ConfSaverFile, NSteps, RNG)
+        (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaverFile
+        testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,3,NWalkers,NSteps)
     end
 end

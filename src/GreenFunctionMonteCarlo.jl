@@ -13,6 +13,7 @@ module GreenFunctionMonteCarlo
     import HDF5
     import Statistics
     import LinearAlgebra
+    import LoopVectorization
     
     include("utils.jl")
     export createMMapArray, readMMapArray

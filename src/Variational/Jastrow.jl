@@ -20,7 +20,7 @@ struct Jastrow{T<:Real} <: AbstractGuidingFunction
     buffer_reset_max::Int
 end
 
-function Jastrow(N::Int,Type = Float32; buffer_reset_max=1000)
+function Jastrow(N::Int,Type = Float32; buffer_reset_max=3_000)
     m_i = zeros(Type,N)
     v_ij = zeros(Type,N,N)
     return Jastrow(m_i,v_ij,buffer_reset_max)
@@ -110,15 +110,15 @@ function post_move_affect!(Buffer::SimpleJastrow_GWF_Buffer,logψ::Jastrow,Confi
     v = get_v_ij(logψ)
     h = Buffer.h_i
     
-    # LoopVectorization.@turbo for (index,i) in enumerate(inds)
     buffer_reset_counter = Buffer.buffer_reset_counter
     buffer_reset_max = logψ.buffer_reset_max
-    if buffer_reset_counter[] >= buffer_reset_max
+    if buffer_reset_counter[] >= buffer_reset_max # recompute buffers only occasionally to avoid accumulation of floating point errors 
         buffer_reset_counter[] = 0
         compute_GWF_buffer!(Buffer,logψ,Config)
         return Buffer
     end
-
+    
+    # LoopVectorization.@turbo for (index,i) in enumerate(inds)
     for (idx,i) in enumerate(sites)
         s = dx[idx]
         

@@ -100,10 +100,6 @@ function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,
         saveObservables_before!(Observables,i,Walkers,H,reconfiguration)
         reconfigurateWalkers!(Walkers,reconfiguration,RNG)
         saveObservables_after!(Observables,i,Walkers,H,reconfiguration)
-
-        if iter%1000 == 0 # recompute buffers only occasionally to avoid accumulation of floating point errors 
-            fill_all_Buffers!(prob,nThreads)
-        end
     end
     return Observables
 end
