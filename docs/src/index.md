@@ -15,7 +15,8 @@ GreenFunctionMonteCarlo.AbstractGuidingFunction
 GreenFunctionMonteCarlo.AbstractDiagObservable
 GreenFunctionMonteCarlo.AbstractMove
 GreenFunctionMonteCarlo.AbstractConfig
-
+GreenFunctionMonteCarlo.AbstractGuidingFunctionBuffer
+GreenFunctionMonteCarlo.AbstractReconfigurationScheme
 GreenFunctionMonteCarlo.GreenFunctionMonteCarlo
 GreenFunctionMonteCarlo.isapplicable
 GreenFunctionMonteCarlo.get_offdiagonal_elements
@@ -30,6 +31,13 @@ GreenFunctionMonteCarlo.pre_move_affect!
 GreenFunctionMonteCarlo.apply!
 GreenFunctionMonteCarlo.NoObserver!
 GreenFunctionMonteCarlo.ConfigObserver!
-GreenFunctionMonteCarlo.GFMCProblem!
 GreenFunctionMonteCarlo.runGFMC!
+GreenFunctionMonteCarlo.minimizeReconfiguration!
+GreenFunctionMonteCarlo.GFMCProblem
+GreenFunctionMonteCarlo.GFMCProblem
+GreenFunctionMonteCarlo.ConfigObserver
+GreenFunctionMonteCarlo.reconfigurateWalkers!
+GreenFunctionMonteCarlo.Jastrow
+GreenFunctionMonteCarlo.NoObserver
+GreenFunctionMonteCarlo.EqualWeightSuperposition
 ```
