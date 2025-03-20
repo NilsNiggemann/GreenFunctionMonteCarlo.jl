@@ -62,7 +62,7 @@ Allocates a specified number of guiding wave function (GWF) buffers.
 # Returns
 - An array filled with `NBuffers` instances of `AbstractGuidingFunctionBuffer`. Defaults to an array of `NotImplementedBuffer` instances.
 """
-allocate_GWF_buffers(logψ::AbstractGuidingFunction, x, NBuffers::Integer) = fill(NotImplementedBuffer(),NBuffers)
+allocate_GWF_buffers(logψ::AbstractGuidingFunction, x, NBuffers) = fill(allocate_GWF_buffer(logψ,x),NBuffers)
 
 compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer,x,logψ::AbstractGuidingFunction) = Buffer
 

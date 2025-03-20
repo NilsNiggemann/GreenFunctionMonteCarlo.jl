@@ -132,6 +132,15 @@ end
 function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,logψ::AbstractGuidingFunction;parallelization = MultiThreaded(NWalkers))
     WE = allocate_walkerEnsemble(config,logψ,NWalkers,H)
     reconfiguration = MinimalReconfiguration(NWalkers)
+    moves_vals = get_offdiagonal_elements(H)
+    
+    for (i) in eachindex(moves_vals)
+        move = get_move(H,i)
+        sites = affected_sites(move)
+        in_bounds = checkbounds(Bool, config,sites)
+        @assert in_bounds "move $i is out of bounds"
+    end
+
     return GFMCProblem(WE,prop,H,logψ,Hilbert,parallelization,reconfiguration)
 end
 

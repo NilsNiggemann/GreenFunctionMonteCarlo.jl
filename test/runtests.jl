@@ -163,16 +163,28 @@ function testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSi
     end
 end
 
-function getExampleHardcore(Nsites,NMoves,rng)
+function getExampleHardcore(Nsites,NMoves,rng,num_nonzero=nothing)
     Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
 
+    getMove(num_nonzero::Nothing) = rand(rng,Bool,Nsites)
+    getMove(num_nonzero::Int) = SameLengthMove(Nsites,num_nonzero,rng)
     H = localOperator(
         [
-            rand(rng,Bool,Nsites) for i in 1:NMoves
-            ]
+            getMove(num_nonzero) for i in 1:NMoves
+        ]
     , -abs.(rand(NMoves)), ZeroDiagOperator(), Hilbert)
     
     return (; Hilbert, H)
+end
+
+function SameLengthMove(Nsites, num_nonzero,rng=Random.default_rng())
+    idxs = collect(1:Nsites)
+    Random.shuffle!(rng,idxs)
+
+    idx = idxs[1:num_nonzero]
+    move = zeros(Bool,Nsites)
+    move[idx] .= true
+    return move
 end
 
 @testset "main Usage" begin
@@ -200,7 +212,7 @@ end
 
     NSteps = 5
 
-    ConfSaverFile = ConfigObserver(outfile, config, NSteps,NWalkers)
+    ConfSaverFile = ConfigObserver(outfile, config, NSteps, NWalkers)
 
     @testset "ConfigObserver" begin
 
@@ -249,34 +261,36 @@ end
 ##
 @testset "Jastrow Tests" begin
     
-    RNG = StableRNG(1234)
-    (Hilbert,H) = getExampleHardcore(3,4,RNG)
+    @testset for num_nonzero in (nothing,3)
+        RNG = StableRNG(1234)
+        NSites = 20
+        (Hilbert,H) = getExampleHardcore(NSites,4,RNG,num_nonzero)
 
-    config = BosonConfig(Hilbert)
-    
-    rand!(RNG,config)
+        config = BosonConfig(Hilbert)
+        
+        rand!(RNG,config)
 
-    logψ = Jastrow(config,Float64)
+        logψ = Jastrow(config,Float64)
 
-    params = get_params(logψ)
-    rand!(RNG,params)
-    logψ.v_ij .= GFMC.LinearAlgebra.Symmetric(logψ.v_ij)
+        params = get_params(logψ)
+        rand!(RNG,params)
+        logψ.v_ij .= GFMC.LinearAlgebra.Symmetric(logψ.v_ij)
 
-    @testset "Wavefunction Ratio" begin
-        TestWFRatio(logψ,config,H,Hilbert)
-    end
-    
-    
-    @testset "run Jastrow" begin
-        NWalkers = 10
-        NSteps = 5
-        CT = ContinuousTimePropagator(1.)
-        prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
-    
-        ConfSaverFile = ConfigObserver(config, NSteps,NWalkers)
-    
-        runGFMC!(prob, ConfSaverFile, NSteps, RNG)
-        (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaverFile
-        testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,3,NWalkers,NSteps)
+        @testset "Wavefunction Ratio" begin
+            TestWFRatio(logψ,config,H,Hilbert)
+        end
+        
+        @testset "run Jastrow" begin
+            NWalkers = 10
+            NSteps = 5
+            CT = ContinuousTimePropagator(1.)
+            prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+        
+            ConfSaverFile = ConfigObserver(config, NSteps,NWalkers)
+        
+            runGFMC!(prob, ConfSaverFile, NSteps, RNG)
+            (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaverFile
+            testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)
+        end
     end
 end

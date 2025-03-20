@@ -13,6 +13,7 @@ struct EqualWeightSuperposition <: AbstractGuidingFunction end
 
 guidingfunc_name(F::EqualWeightSuperposition) = "EqualWeightSuperposition"
 get_params(ψG::EqualWeightSuperposition) = zeros(0)
+allocate_GWF_buffer(logψ::EqualWeightSuperposition,conf) = EmptyGWFBuffer()
 
 function log_psi_diff(x::AbstractArray, move::AbstractMove, logψ::EqualWeightSuperposition, Buffer::AbstractGuidingFunctionBuffer, Hilbert::AbstractHilbertSpace)
     isapplicable(x,move, Hilbert) || return -Inf

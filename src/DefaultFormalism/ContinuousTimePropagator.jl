@@ -59,7 +59,6 @@ function continuos_time_propagation_walker!(WE::AbstractWalkerEnsemble, α::Int,
         log_w += -τ_step * el_x
         if τleft > 0 
             last_move = performMarkovStep!(Config, moveWeights, H, RNG)
-
             post_move_affect!(GWFBuffer, Config, last_move, logψ)
             get_markov_weights!(moveWeights, Config, H, logψ, Hilbert, GWFBuffer)
 
