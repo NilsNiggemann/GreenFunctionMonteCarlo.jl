@@ -163,4 +163,15 @@ A `GFMCProblem` instance configured with the specified parameters.
 # Notes
 - The `logψ` and `logpsi` parameters are interchangeable and exactly one needs to be provided.
 """
+function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator; H, Hilbert, logψ = nothing, logpsi = nothing,parallelization = MultiThreaded(NWalkers))
+    
+    if logψ !== nothing && logpsi !== nothing
+        throw(ArgumentError("Only one of `logψ` or `logpsi` can be specified."))
+    end
+
+    GWF = logψ !== nothing ? logψ : logpsi
+    return GFMCProblem(config,NWalkers,prop,H, Hilbert, GWF; parallelization)
+end
+
+runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range, rng = Random.default_rng()) = runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,rng)
 runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,NSteps::Integer, rng = Random.default_rng()) = runGFMC!(prob,Observables,1:NSteps,rng)

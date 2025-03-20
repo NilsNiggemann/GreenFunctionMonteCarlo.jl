@@ -12,6 +12,7 @@ module GreenFunctionMonteCarlo
     import SmallCollections
     import HDF5
     import Statistics
+    import LinearAlgebra
     
     include("utils.jl")
     export createMMapArray, readMMapArray
@@ -22,11 +23,10 @@ module GreenFunctionMonteCarlo
 
     export ZeroDiagOperator
 
-    export propagateWalkers!, fulfills_constraint, InverseMove, apply!
+    export propagateWalkers!, fulfills_constraint, InverseMove, apply!, get_params
 
     export SingleThreaded, MultiThreaded
     
-    include("Variational/EqualWeightSuperposition.jl")
     
     include("DefaultFormalism/BosonicConfig.jl")
     export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, HardCoreConstraint, fulfills_constraint
@@ -37,12 +37,20 @@ module GreenFunctionMonteCarlo
     export LocalOperator, localOperator, SparseMove
 
     include("DefaultFormalism/MinimalReconfiguration.jl")
+
     include("DefaultFormalism/ConfigObserver.jl")
     export ConfigObserver
+
     include("DefaultFormalism/ManyWalkerGFMC.jl")
     export NoObserver, runGFMC!, GFMCProblem
 
     include("DefaultFormalism/ContinuousTimePropagator.jl")
-    
+
+    include("Variational/EqualWeightSuperposition.jl")
+    export EqualWeightSuperposition
+
+    include("Variational/Jastrow.jl")
+    export Jastrow
+
     export ContinuousTimePropagator
 end # module

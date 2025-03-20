@@ -27,7 +27,7 @@ end
 @inline affected_sites(move::FlipMove) = move.inds
 @inline function move_dx(move::FlipMove,x::AbstractConfig{Bool})
     map(move.inds) do i
-        !x[i]
+        !x[i] - x[i]
     end
 end
 
@@ -49,6 +49,7 @@ end
 @inline get_offdiagonal_elements(O::LocalOperator) = O.off_diag
 
 isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::HardCoreConstraint) = true
+isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::OccupationNumberConstraint) = true
 
 _move_type(::LocalOperator{MoveType}) where {MoveType} = MoveType
 

@@ -8,14 +8,14 @@ import GreenFunctionMonteCarlo.SmallCollections as SC
 
 @testset "Bosonic Configuration Tests" begin
     Hilbert = BosonHilbertSpace(10, OccupationNumberConstraint(0, 1))
-
+    RNG = StableRNG(1234)
     config = BosonConfig(Hilbert)
     
     @testset "UInt8 Variables" begin
         @test size(config) === (10,)
         @test config == BosonConfig(zeros(UInt8,10))
         @test fulfills_constraint(config, Hilbert)
-        rand!(config)
+        rand!(RNG,config)
         @test !fulfills_constraint(config, Hilbert)
     end
 
@@ -26,7 +26,7 @@ import GreenFunctionMonteCarlo.SmallCollections as SC
         @testset "Bool Variables" begin
             @test size(config) === (10,)
             @test fulfills_constraint(config, Hilbert)
-            rand!(config)
+            rand!(RNG,config)
             @test fulfills_constraint(config, Hilbert)
         end
     end
@@ -35,7 +35,7 @@ import GreenFunctionMonteCarlo.SmallCollections as SC
         Hilbert = BosonHilbertSpace(10, HardCoreConstraint())
         config = BosonConfig(Hilbert)
         @test fulfills_constraint(config, Hilbert)
-        rand!(config)
+        rand!(RNG,config)
         @test fulfills_constraint(config, Hilbert)
     end
 end
@@ -139,9 +139,22 @@ end
     
 end
 ##
+function getExampleHardcore(Nsites,NMoves,rng)
+    Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
+
+    H = localOperator(
+        [
+            rand(rng,Bool,Nsites) for i in 1:NMoves
+            ]
+    , -abs.(rand(NMoves)), ZeroDiagOperator(), Hilbert)
+    
+    return (; Hilbert, H)
+end
+
 @testset "main Usage" begin
     
-    Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
+    (;Hilbert,H) = getExampleHardcore(3,4,StableRNG(1234))
+
     config = BosonConfig(Hilbert)
     rand!(config)
     logψ = GFMC.EqualWeightSuperposition()
@@ -149,14 +162,6 @@ end
     CT = ContinuousTimePropagator(1.)
     
     RNG = StableRNG(1234)
-    H = localOperator(
-        [
-            Bool[0,1,1],
-            Bool[0,0,1],
-            Bool[0,1,0],
-            Bool[1,1,0],
-            ]
-    , -[0.5, 0.3, 0.2 ,0.4], ZeroDiagOperator(), Hilbert)
 
     prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
 
@@ -171,7 +176,7 @@ end
 
     NSteps = 5
 
-    ConfSaverFile = configObserver(outfile, config, NSteps,NWalkers)
+    ConfSaverFile = ConfigObserver(outfile, config, NSteps,NWalkers)
 
     @testset "ConfigObserver" begin
 
@@ -211,5 +216,48 @@ end
                 @test !iszero(reconfigurationTable)
             end
         end
+    end
+end
+
+##
+
+function TestWFRatio(logψ,conf,H,Hilbert;tol=1e-10)
+    Buff = GFMC.allocate_GWF_buffer(logψ,conf)
+    psiname = GFMC.guidingfunc_name(logψ)
+
+    GFMC.compute_GWF_buffer!(Buff,logψ,conf)
+
+    @testset "$psiname ψ(x´) / ψ(x)" begin
+        for m in H.moves
+            GFMC.isapplicable(conf,m,Hilbert) || continue
+            psidiff = GFMC.log_psi_diff(conf, m, logψ, Buff, Hilbert)
+            
+            xpr = copy(conf)
+            apply!(xpr,m)
+            
+            @test psidiff ≈ logψ(xpr) - logψ(conf) atol=tol
+            
+        end
+    end
+end
+
+##
+@testset "Jastrow Tests" begin
+    
+    RNG = StableRNG(1234)
+    (Hilbert,H) = getExampleHardcore(3,4,RNG)
+
+    config = BosonConfig(Hilbert)
+    
+    rand!(RNG,config)
+
+    logψ = Jastrow(config,Float64)
+
+    params = get_params(logψ)
+    rand!(RNG,params)
+    logψ.v_ij .= GFMC.LinearAlgebra.Symmetric(logψ.v_ij)
+
+    @testset "Wavefunction Ratio" begin
+        TestWFRatio(logψ,config,H,Hilbert)
     end
 end
