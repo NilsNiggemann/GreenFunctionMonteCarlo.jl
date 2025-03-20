@@ -29,13 +29,10 @@ GreenFunctionMonteCarlo.DiagonalOperator
 GreenFunctionMonteCarlo.continuos_time_propagation!
 GreenFunctionMonteCarlo.pre_move_affect!
 GreenFunctionMonteCarlo.apply!
-GreenFunctionMonteCarlo.NoObserver!
-GreenFunctionMonteCarlo.ConfigObserver!
+GreenFunctionMonteCarlo.ConfigObserver
 GreenFunctionMonteCarlo.runGFMC!
 GreenFunctionMonteCarlo.minimizeReconfiguration!
 GreenFunctionMonteCarlo.GFMCProblem
-GreenFunctionMonteCarlo.GFMCProblem
-GreenFunctionMonteCarlo.ConfigObserver
 GreenFunctionMonteCarlo.reconfigurateWalkers!
 GreenFunctionMonteCarlo.Jastrow
 GreenFunctionMonteCarlo.NoObserver
