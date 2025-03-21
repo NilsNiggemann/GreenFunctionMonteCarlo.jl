@@ -4,6 +4,31 @@ using Test
 using Random
 using StableRNGs
 import GreenFunctionMonteCarlo.SmallCollections as SC
+
+function getExampleHardcore(Nsites,NMoves,rng,num_nonzero=nothing)
+    Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
+
+    getMove(num_nonzero::Nothing) = rand(rng,Bool,Nsites)
+    getMove(num_nonzero::Int) = SameLengthMove(Nsites,num_nonzero,rng)
+    H = localOperator(
+        [
+            getMove(num_nonzero) for i in 1:NMoves
+        ]
+    , -abs.(rand(NMoves)), ZeroDiagOperator(), Hilbert)
+    
+    return (; Hilbert, H)
+end
+
+function SameLengthMove(Nsites, num_nonzero,rng=Random.default_rng())
+    idxs = collect(1:Nsites)
+    Random.shuffle!(rng,idxs)
+
+    idx = idxs[1:num_nonzero]
+    move = zeros(Bool,Nsites)
+    move[idx] .= true
+    return move
+end
+
 ##
 
 @testset "Bosonic Configuration Tests" begin
@@ -163,29 +188,6 @@ function testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSi
     end
 end
 
-function getExampleHardcore(Nsites,NMoves,rng,num_nonzero=nothing)
-    Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
-
-    getMove(num_nonzero::Nothing) = rand(rng,Bool,Nsites)
-    getMove(num_nonzero::Int) = SameLengthMove(Nsites,num_nonzero,rng)
-    H = localOperator(
-        [
-            getMove(num_nonzero) for i in 1:NMoves
-        ]
-    , -abs.(rand(NMoves)), ZeroDiagOperator(), Hilbert)
-    
-    return (; Hilbert, H)
-end
-
-function SameLengthMove(Nsites, num_nonzero,rng=Random.default_rng())
-    idxs = collect(1:Nsites)
-    Random.shuffle!(rng,idxs)
-
-    idx = idxs[1:num_nonzero]
-    move = zeros(Bool,Nsites)
-    move[idx] .= true
-    return move
-end
 
 @testset "main Usage" begin
     
@@ -281,15 +283,16 @@ end
         end
         
         @testset "run Jastrow" begin
-            NWalkers = 10
-            NSteps = 5
+            NWalkers = 20
+            NSteps = 10
             CT = ContinuousTimePropagator(1.)
-            prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+            prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert,parallelization = GFMC.SingleThreaded())
         
-            ConfSaverFile = ConfigObserver(config, NSteps,NWalkers)
+            ConfSaver = ConfigObserver(config, NSteps,NWalkers)
         
-            runGFMC!(prob, ConfSaverFile, NSteps, RNG)
-            (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaverFile
+            runGFMC!(prob, ConfSaver, NSteps, RNG)
+
+            (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaver
             testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)
         end
     end

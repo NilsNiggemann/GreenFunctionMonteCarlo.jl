@@ -135,34 +135,74 @@ end
     (;h_i) = Buffer
     
     sites = affected_sites(move)
-    dx = move_dx(move,Config)
+    dx = move_dx_jastrow(move,Config)
+
     vij = get_v_ij(logψ)
 
     return _jastrow_diff_kernel(sites,dx,h_i,vij)
+end
+# hack into move_dx to allow even faster path which utilizes booleans
+@inline function move_dx_jastrow(move::FlipMove{<:SA.SVector},x::AbstractConfig{Bool})
+    map(move.inds) do i
+        x[i]
+    end
+end
+# default fallback, use move_dx which returns a Number type
+@inline function move_dx_jastrow(move::AbstractMove,x::AbstractConfig{Bool})
+    move_dx(move,x)
 end
 
 const LV_COMPATIBLE_VECTOR = Union{Vector,SA.SVector}
 const LV_COMPATIBLE_MATRIX = Union{Matrix,SA.SMatrix}
 
 # fast compile-time branch for types allowed by LoopVectorization
+@inline function _jastrow_diff_kernel(sites::LV_COMPATIBLE_VECTOR,dx::SA.SVector{N,Bool},h_i::LV_COMPATIBLE_VECTOR,vij::LV_COMPATIBLE_MATRIX) where N
+    log_h = zero(eltype(h_i))
+    # note: dx[idx] is a boolean. false corresponds to x=0 => dx = 1, true corresponds to x=1 => dx = -1
+    LoopVectorization.@turbo for idx in eachindex(sites)
+        i = sites[idx]
+        s = dx[idx]
+        his = ifelse(s,-h_i[i],h_i[i])
+        log_h += his
+        # log_h += h_i[i]*s #note: h_i contains m_i
+    end
+
+    log_h2 = zero(log_h)
+    LoopVectorization.@turbo for (i_k,k) in enumerate(sites) #todo: precompute this for all moves in the GWF Buffer
+        s1 = dx[i_k]
+        for (i_j,j) in enumerate(sites)
+            # log_h += 0.5*dx[i_k]*dx[i_j]*vij[j,k]
+            vv = vij[j,k]
+            s2 = dx[i_j]
+            ssv = ifelse(s1 ⊻ s2,-vv,vv)
+            log_h2 += ssv
+        end
+    end
+    return log_h + 0.5log_h2
+end
+
 @inline function _jastrow_diff_kernel(sites::LV_COMPATIBLE_VECTOR,dx::LV_COMPATIBLE_VECTOR,h_i::LV_COMPATIBLE_VECTOR,vij::LV_COMPATIBLE_MATRIX)
     log_h = zero(eltype(h_i))
-
     LoopVectorization.@turbo for idx in eachindex(sites)
         i = sites[idx]
         s = dx[idx]
         log_h += h_i[i]*s #note: h_i contains m_i
     end
 
+    log_h2 = zero(eltype(h_i))
     LoopVectorization.@turbo for (i_k,k) in enumerate(sites) #todo: precompute this for all moves in the GWF Buffer
+        s1 = dx[i_k]
+        sumterm = zero(log_h2)
         for (i_j,j) in enumerate(sites)
-            log_h += 0.5*dx[i_k]*dx[i_j]*vij[j,k]
+            # log_h2 += dx[i_k]*dx[i_j]*vij[j,k]
+            sumterm += dx[i_j]*vij[j,k]
         end
+        log_h2 += s1*sumterm
     end
-    return log_h
+    return log_h + 0.5log_h2
 end
 # slower, generic fallback
-@inline function _jastrow_diff_kernel(sites,dx,h_i,vij)
+@inline function _jastrow_diff_kernel(sites,dx::AbstractVector{<:Number},h_i,vij)
     log_h = zero(eltype(h_i))
 
     @inbounds @simd for idx in eachindex(sites)
@@ -171,12 +211,17 @@ end
         log_h += h_i[i]*s #note: h_i contains m_i
     end
 
+    log_h2 = zero(log_h)
     @inbounds @simd for i_k in eachindex(sites)
         k = sites[i_k]
+        s1 = dx[i_k]
+        sumterm = zero(log_h)
         for i_j in eachindex(sites)
             j = sites[i_j]
-            log_h += 0.5*dx[i_k]*dx[i_j]*vij[j,k]
+            # log_h += 0.5*dx[i_k]*dx[i_j]*vij[j,k]
+            sumterm += dx[i_j]*vij[j,k]
         end
+        log_h2 += s1*sumterm
     end
-    return log_h
+    return log_h + 0.5log_h2
 end

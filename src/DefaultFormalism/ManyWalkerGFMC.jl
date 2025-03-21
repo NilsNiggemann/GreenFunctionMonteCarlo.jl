@@ -22,8 +22,11 @@ function _get_markov_weights!(weights::AbstractVector,x::AbstractConfig,H::Abstr
     Hxy = get_offdiagonal_elements(H)
     for i in eachindex(weights)
         move = get_move(H,i)
-        ψx´_ψx = exp(log_psi_diff(x,move,logψ,Buffer,Hilbert))
-        weights[i] = - ψx´_ψx * Hxy[i]
+        weights[i] = log_psi_diff(x,move,logψ,Buffer,Hilbert)
+    end
+    
+    LoopVectorization.@turbo for i in eachindex(weights)
+        weights[i] = -exp(weights[i]) * Hxy[i]
     end
     return weights
 end
