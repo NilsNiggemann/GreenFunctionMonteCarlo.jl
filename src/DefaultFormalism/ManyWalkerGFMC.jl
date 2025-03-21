@@ -95,7 +95,7 @@ This function performs the GFMC simulation by evolving the walker ensemble using
 - The function modifies the `Walkers` object in place.
 - Ensure that all input objects are properly initialized before calling this function.
 """
-function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,reconfiguration::AbstractReconfigurationScheme,range,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,RNG::Random.AbstractRNG)
+function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,reconfiguration::AbstractReconfigurationScheme,range,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,logger::AbstractLogger,RNG::Random.AbstractRNG)
     iter = 0
     for i in range
         iter += 1
@@ -103,6 +103,7 @@ function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,
         saveObservables_before!(Observables,i,Walkers,H,reconfiguration)
         reconfigurateWalkers!(Walkers,reconfiguration,RNG)
         saveObservables_after!(Observables,i,Walkers,H,reconfiguration)
+        write_log(logger,i,range,Walkers,Observables,reconfiguration)
     end
     return Observables
 end
@@ -163,6 +164,7 @@ Creates a Green Function Monte Carlo (GFMC) problem instance and allocates all n
 - `Hilbert`: The Hilbert space representation of the system.
 - `logψ`: Trial wavefunction implementing x→log(ψ(x)).
 - `logpsi`: Alias for `logψ`.
+- `logger`: Logger object to record simulation progress. Default is `NoLogger()`.
 - `parallelization`: Parallelization strategy for the simulation, defaulting to `MultiThreaded(NWalkers)`, which tries to pick an optimal number of tasks to spawn.
 
 # Returns
@@ -181,5 +183,5 @@ function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractProp
     return GFMCProblem(config,NWalkers,prop,H, Hilbert, GWF; parallelization)
 end
 
-runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range, rng = Random.default_rng()) = runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,rng)
-runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,NSteps::Integer, rng = Random.default_rng()) = runGFMC!(prob,Observables,1:NSteps,rng)
+runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range, logger = NoLogger(), rng = Random.default_rng()) = runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,logger,rng)
+runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,NSteps::Integer, logger = NoLogger(), rng = Random.default_rng()) = runGFMC!(prob,Observables,1:NSteps,logger,rng)

@@ -9,4 +9,5 @@ include("AbstractPropagator.jl")
 include("AbstractObserver.jl")
 include("AbstractGFMCProblem.jl")
 
+include("AbstractLogger.jl")
 include("AbstractParallelizationScheme.jl")

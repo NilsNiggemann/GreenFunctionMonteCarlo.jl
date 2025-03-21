@@ -19,3 +19,5 @@ function readMMapArray(filename::AbstractString,datasetname::String)
         return HDF5.readmmap(SaveConfigs_dset)
     end
 end
+
+strd(x,args...;kwargs...) = string(round(x,args...;digits = 3,kwargs...))

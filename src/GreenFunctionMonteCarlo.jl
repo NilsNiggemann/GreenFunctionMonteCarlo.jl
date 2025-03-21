@@ -20,7 +20,7 @@ module GreenFunctionMonteCarlo
 
     include("AbstractTypes/AbstractTypes.jl")
     
-    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator
+    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator, AbstractLogger
 
     export ZeroDiagOperator
 
@@ -46,6 +46,7 @@ module GreenFunctionMonteCarlo
     export NoObserver, runGFMC!, GFMCProblem
 
     include("DefaultFormalism/ContinuousTimePropagator.jl")
+    export ContinuousTimePropagator
 
     include("Variational/EqualWeightSuperposition.jl")
     export EqualWeightSuperposition
@@ -53,5 +54,6 @@ module GreenFunctionMonteCarlo
     include("Variational/Jastrow.jl")
     export Jastrow
 
-    export ContinuousTimePropagator
+    include("DefaultFormalism/SimpleLogger.jl")
+    export SimpleLogger, NoLogger
 end # module
