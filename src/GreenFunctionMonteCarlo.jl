@@ -55,7 +55,7 @@ module GreenFunctionMonteCarlo
     export Jastrow
 
     include("DefaultFormalism/SimpleLogger.jl")
-    include("DefaultFormalism/ProgressBarLoggerExt.jl")
+    include("DefaultFormalism/ProgressBarLogger.jl")
     export SimpleLogger, NoLogger, ProgressBarLogger
 
         
