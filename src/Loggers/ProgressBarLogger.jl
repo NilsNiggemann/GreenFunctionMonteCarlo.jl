@@ -28,20 +28,30 @@ end
 is_logging(io) = isa(io, Base.TTY) == false || (get(ENV, "CI", nothing) == "true")
 
 function write_log(logger::ProgressBarLogger, i, range, Walkers::AbstractWalkerEnsemble, Observables::Any, reconfiguration)
-
     if isnothing(logger.p[]) # if logger.p is nothing, create a new progress bar
         logger.p[] = Progress(length(range),dt=logger.dt;output = stderr,showspeed=true, enabled = !is_logging(stderr),desc="running GFMC...",logger.options...)
     end
+
+    function showValFunc()
+        vals = generate_showvalues(i, Walkers, Observables, reconfiguration)
+        return filter(!isequal(_empty_log()),vals)
+    end
+
+    next!(logger.p[],showvalues = showValFunc())
+    try
+        1
+    catch e
+        @warn e maxlog=1
+    end
     
-    next!(logger.p[],showvalues = () -> generate_showvalues(i, Walkers,Observables,reconfiguration))
 end
 
-function write_log(logger::ProgressBarLogger, i, range, Walkers::AbstractWalkerEnsemble, Observables::NoObserver, reconfiguration)
-    if isnothing(logger.p[])
-        logger.p[] = Progress(length(range),dt=logger.dt)
-    end
-    RL = get_reconfigurationList(reconfiguration)
-    SurvWalkers = length(unique(RL))
-    NW = NWalkers(Walkers)
-    next!(logger.p[],showvalues = [("Walker Survival",SurvWalkers/NW)])
-end
+# function write_log(logger::ProgressBarLogger, i, range, Walkers::AbstractWalkerEnsemble, Observables::NoObserver, reconfiguration)
+#     if isnothing(logger.p[])
+#         logger.p[] = Progress(length(range),dt=logger.dt)
+#     end
+#     RL = get_reconfigurationList(reconfiguration)
+#     SurvWalkers = length(unique(RL))
+#     NW = NWalkers(Walkers)
+#     next!(logger.p[],showvalues = [("Walker Survival",SurvWalkers/NW)])
+# end
