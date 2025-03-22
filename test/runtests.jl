@@ -205,7 +205,7 @@ end
 
     @testset "runGFMC" begin
         obs = NoObserver()
-        runGFMC!(prob, obs, 10, RNG)
+        runGFMC!(prob, obs, 10; rng= RNG)
         AllConfs = stack(prob.WE.Configs)
         @test AllConfs != zeros(Bool,3,NWalkers)
     end
@@ -219,7 +219,7 @@ end
     @testset "ConfigObserver" begin
 
         @test isfile(outfile)
-        runGFMC!(prob, ConfSaverFile, NSteps, RNG)
+        runGFMC!(prob, ConfSaverFile, NSteps; rng= RNG)
 
         GFMC.HDF5.h5open(outfile, "r") do file
             @test haskey(file, "SaveConfigs")
@@ -290,7 +290,7 @@ end
         
             ConfSaver = ConfigObserver(config, NSteps,NWalkers)
         
-            runGFMC!(prob, ConfSaver, NSteps, RNG)
+            runGFMC!(prob, ConfSaver, NSteps;rng= RNG)
 
             (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaver
             testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)

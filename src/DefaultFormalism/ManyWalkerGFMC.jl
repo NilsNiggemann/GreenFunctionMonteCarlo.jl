@@ -72,7 +72,7 @@ saveObservables_after!(::NoObserver,i,Walkers,propagator,reconfigurations) = not
 """
     runGFMC!(Walkers::AbstractWalkerEnsemble, Observables::AbstractObserver, reconfiguration::AbstractReconfigurationScheme, 
              range, propagator::AbstractPropagator, logψ::AbstractGuidingFunction, H::AbstractSignFreeOperator, 
-             Hilbert::AbstractHilbertSpace, parallelizer::AbstractParallelizationScheme, RNG::Random.AbstractRNG)
+             Hilbert::AbstractHilbertSpace, parallelizer::AbstractParallelizationScheme, logger::AbstractLogger, RNG::Random.AbstractRNG)
 
 Runs the Green Function Monte Carlo (GFMC) simulation for a given system.
 
@@ -86,6 +86,7 @@ Runs the Green Function Monte Carlo (GFMC) simulation for a given system.
 - `H::AbstractSignFreeOperator`: The Hamiltonian operator of the system, assumed to be sign-free.
 - `Hilbert::AbstractHilbertSpace`: The Hilbert space on which the system is defined.
 - `parallelizer::AbstractParallelizationScheme`: The parallelization scheme used to distribute computation across resources.
+- `logger::AbstractLogger`: The logger object used to record simulation progress.
 - `RNG::Random.AbstractRNG`: The random number generator used for stochastic processes in the simulation.
 
 # Description
@@ -183,5 +184,27 @@ function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractProp
     return GFMCProblem(config,NWalkers,prop,H, Hilbert, GWF; parallelization)
 end
 
-runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range, logger = NoLogger(), rng = Random.default_rng()) = runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,logger,rng)
-runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,NSteps::Integer, logger = NoLogger(), rng = Random.default_rng()) = runGFMC!(prob,Observables,1:NSteps,logger,rng)
+"""
+    runGFMC!(prob::GFMCProblem, Observables::AbstractObserver, range; logger = NoLogger(), rng = Random.default_rng())
+
+Run the Green's Function Monte Carlo (GFMC) simulation for the given problem.
+
+# Arguments
+- `prob::GFMCProblem`: The GFMC problem instance containing the system configuration and parameters.
+- `Observables::AbstractObserver`: An observer object to track and record observables during the simulation.
+- `range`: Integer or range: The range of iterations or steps over which the simulation will be performed.
+- `logger`: (Optional) A logger instance for logging simulation progress. Defaults to `NoLogger()`.
+- `rng`: (Optional) A random number generator to ensure reproducibility. Defaults to `Random.default_rng()`.
+
+# Returns
+This function modifies the `prob` and `Observables` in place to reflect the results of the simulation.
+
+# Notes
+Ensure that the `prob` and `Observables` are properly initialized before calling this function.
+"""
+function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range; logger = NoLogger(), rng = Random.default_rng())
+    if range isa Integer
+        range = 1:range
+    end
+    runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,logger,rng)
+end

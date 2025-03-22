@@ -1,6 +1,11 @@
 struct ZeroDiagOperator <: DiagonalOperator end
 (::ZeroDiagOperator)(x::AbstractConfig) = 0.
 
+struct DiagOperator{F} <: DiagonalOperator
+    f::F
+end
+(F::DiagOperator)(x::AbstractConfig) = F.f(x)
+
 struct SparseMove{T,V1<:AbstractVector{Int},V2<:AbstractVector{T}} <: AbstractMove
     inds::V1
     vals::V2
