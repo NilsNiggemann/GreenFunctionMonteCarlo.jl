@@ -289,8 +289,8 @@ end
             prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert,parallelization = GFMC.SingleThreaded())
         
             ConfSaver = ConfigObserver(config, NSteps,NWalkers)
-        
-            runGFMC!(prob, ConfSaver, NSteps;rng= RNG)
+
+            runGFMC!(prob, ConfSaver, NSteps;rng = RNG,logger = ProgressBarLogger(dt=0.1))
 
             (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaver
             testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)
