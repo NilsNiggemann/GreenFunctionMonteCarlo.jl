@@ -193,7 +193,7 @@ Run the Green's Function Monte Carlo (GFMC) simulation for the given problem.
 - `prob::GFMCProblem`: The GFMC problem instance containing the system configuration and parameters.
 - `Observables::AbstractObserver`: An observer object to track and record observables during the simulation.
 - `range`: Integer or range: The range of iterations or steps over which the simulation will be performed.
-- `logger`: (Optional) A logger instance for logging simulation progress. Defaults to `ProgressBarLogger(dt=0.1)`.
+- `logger`: (Optional) A logger instance for logging simulation progress. Defaults to `ProgressBarLogger(dt=0.1)`. Use `NoLogger()` or `nothing` to disable logging.
 - `rng`: (Optional) A random number generator to ensure reproducibility. Defaults to `Random.default_rng()`.
 
 # Returns
@@ -205,6 +205,9 @@ Ensure that the `prob` and `Observables` are properly initialized before calling
 function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range; logger = ProgressBarLogger(dt=0.1), rng = Random.default_rng())
     if range isa Integer
         range = 1:range
+    end
+    if isnothing(logger)
+        logger = NoLogger()
     end
     runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,logger,rng)
 end
