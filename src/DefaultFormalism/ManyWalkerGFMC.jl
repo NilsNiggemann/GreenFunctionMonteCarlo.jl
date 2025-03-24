@@ -202,7 +202,7 @@ This function modifies the `prob` and `Observables` in place to reflect the resu
 # Notes
 Ensure that the `prob` and `Observables` are properly initialized before calling this function.
 """
-function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range; logger = ProgressBarLogger(dt=0.1), rng = Random.default_rng())
+function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range; logger = default_logger(), rng = Random.default_rng())
     if range isa Integer
         range = 1:range
     end

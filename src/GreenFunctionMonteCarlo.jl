@@ -14,6 +14,7 @@ module GreenFunctionMonteCarlo
     import Statistics
     import LinearAlgebra
     import LoopVectorization
+    import ProgressMeter
     
     include("utils.jl")
     export createMMapArray, readMMapArray
