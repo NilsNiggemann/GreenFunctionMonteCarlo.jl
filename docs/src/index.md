@@ -41,5 +41,7 @@ GreenFunctionMonteCarlo.NoLogger
 GreenFunctionMonteCarlo.SimpleLogger
 GreenFunctionMonteCarlo.ProgressBarLogger
 GreenFunctionMonteCarlo.NaiveFunction
-
+GreenFunctionMonteCarlo.CombinedObserver
+GreenFunctionMonteCarlo.ConfigurationObserver
+GreenFunctionMonteCarlo.BasicObserver
 ```

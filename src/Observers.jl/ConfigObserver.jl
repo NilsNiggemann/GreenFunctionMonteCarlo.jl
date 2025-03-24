@@ -25,6 +25,17 @@ function saveObservables_after!(Observables::ConfigurationObserver,i,Walkers::Ab
     return nothing
 end
 
+"""
+    ConfigObserver(filename, config::AbstractConfig{T,N}, NSteps::Integer, NWalkers::Integer) where {T,N}
+
+Creates a combined observer that tracks energy, weight, reconfigurations and configurations of the walkers during the Monte Carlo simulation. The observer saves the data to a file with the given filename.
+
+# Arguments
+- `filename::String`: The name of the file where the configuration data will be saved.
+- `config::AbstractConfig{T,N}`: The initial configuration object representing the system state.
+- `NSteps::Integer`: The number of simulation steps to be observed.
+- `NWalkers::Integer`: The number of walkers (or particles) in the simulation.
+"""
 function ConfigObserver(filename,config::AbstractConfig{T,N},NSteps::Integer,NWalkers::Integer) where {T,N}
     return CombinedObserver((;BasicObserver = BasicObserver(filename,NSteps,NWalkers),ConfigurationObserver = ConfigurationObserver(filename,config,NSteps,NWalkers)))
 end
