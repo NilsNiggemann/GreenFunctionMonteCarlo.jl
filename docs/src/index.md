@@ -37,4 +37,7 @@ GreenFunctionMonteCarlo.reconfigurateWalkers!
 GreenFunctionMonteCarlo.Jastrow
 GreenFunctionMonteCarlo.NoObserver
 GreenFunctionMonteCarlo.EqualWeightSuperposition
+GreenFunctionMonteCarlo.NoLogger
+GreenFunctionMonteCarlo.SimpleLogger
+GreenFunctionMonteCarlo.ProgressBarLogger
 ```
