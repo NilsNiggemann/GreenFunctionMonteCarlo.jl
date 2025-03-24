@@ -292,7 +292,7 @@ end
 
             runGFMC!(prob, ConfSaver, NSteps;rng = RNG,logger = ProgressBarLogger(dt=0.1))
 
-            (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaver
+            (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = GFMC.getObs(ConfSaver)
             testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)
         end
     end

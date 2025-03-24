@@ -22,16 +22,14 @@ end
 
 function write_log(logger::ProgressBarLogger, i, range, Walkers::AbstractWalkerEnsemble, Observables::Any, reconfiguration)
     if isnothing(logger.p) || i == first(range) # initialize progress bar
-        logger.p = ProgressMeter.Progress(length(range),dt=0.1;output = stderr,showspeed=true, enabled = !is_logging(stderr),desc="running GFMC...",logger.options...)
+        logger.p = ProgressMeter.Progress(length(range),dt=0.1;output = stderr,showspeed=true, enabled = !is_logging(stderr),logger.options...)
     end
 
-    function showValFunc()
-        vals = generate_showvalues(i, Walkers, Observables, reconfiguration)
-        return filter(!isequal(_empty_log()),vals)
-    end
+    showValFunc() = generate_showvalues(i, Walkers, Observables, reconfiguration)
 
+    ProgressMeter.next!(logger.p,showvalues = showValFunc();desc = "running GFMC... $i/$(last(range))")
     try
-        ProgressMeter.next!(logger.p,showvalues = showValFunc())
+        1
     catch e
         @warn e maxlog=1
     end

@@ -30,6 +30,11 @@ module GreenFunctionMonteCarlo
     export SingleThreaded, MultiThreaded
     
     
+    include("Observers.jl/BasicObserver.jl")
+    include("Observers.jl/CombinedObserver.jl")
+    include("Observers.jl/ConfigObserver.jl")
+    export BasicObserver, ConfigurationObserver, ConfigObserver
+
     include("DefaultFormalism/BosonicConfig.jl")
     export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, HardCoreConstraint, fulfills_constraint
 
@@ -39,9 +44,6 @@ module GreenFunctionMonteCarlo
     export LocalOperator, localOperator, SparseMove
 
     include("DefaultFormalism/MinimalReconfiguration.jl")
-
-    include("DefaultFormalism/ConfigObserver.jl")
-    export ConfigObserver
 
     include("DefaultFormalism/ManyWalkerGFMC.jl")
     export NoObserver, runGFMC!, GFMCProblem
@@ -60,6 +62,7 @@ module GreenFunctionMonteCarlo
 
     include("Variational/NaiveFunction.jl")
     export NaiveFunction
+
 
     include("Loggers/LoggerUtils.jl")
 

@@ -34,6 +34,13 @@ function getEnergies(weights,localEnergies,PMax;
     return num ./denom
 end
 
-function getEnergies(Obs::ConfigObserver,PMax);
+function getEnergies(Obs::BasicObserver,PMax);
     return getEnergies(Obs.TotalWeights,Obs.energies,PMax)
+end
+
+function getEnergies(Obs::CombinedObserver,PMax);
+    for O in Obs.Observers
+        O isa BasicObserver && return getEnergies(O,PMax)
+    end
+    error("No BasicObserver found in CombinedObserver. Consider explicitly running `getEnergies(weights,localEnergies,PMax)` instead")
 end
