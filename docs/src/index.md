@@ -40,4 +40,6 @@ GreenFunctionMonteCarlo.EqualWeightSuperposition
 GreenFunctionMonteCarlo.NoLogger
 GreenFunctionMonteCarlo.SimpleLogger
 GreenFunctionMonteCarlo.ProgressBarLogger
+GreenFunctionMonteCarlo.NaiveFunction
+
 ```

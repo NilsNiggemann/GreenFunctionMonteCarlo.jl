@@ -58,6 +58,9 @@ module GreenFunctionMonteCarlo
     include("Variational/Jastrow.jl")
     export Jastrow
 
+    include("Variational/NaiveFunction.jl")
+    export NaiveFunction
+
     include("Loggers/LoggerUtils.jl")
 
     include("Loggers/NoLogger.jl")
