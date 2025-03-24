@@ -1,0 +1,4 @@
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+GreenFunctionMonteCarlo = "e45d4fac-aaab-4ad3-82ee-5f28c030554c"
+MakieHelpers = "769ed66a-a1e3-4c16-885f-a5b16fb973c2"

@@ -49,6 +49,9 @@ module GreenFunctionMonteCarlo
     include("DefaultFormalism/ContinuousTimePropagator.jl")
     export ContinuousTimePropagator
 
+    include("DefaultFormalism/Evaluation.jl")
+    export getEnergies, precomputeNormalizedAccWeight
+    
     include("Variational/EqualWeightSuperposition.jl")
     export EqualWeightSuperposition
 

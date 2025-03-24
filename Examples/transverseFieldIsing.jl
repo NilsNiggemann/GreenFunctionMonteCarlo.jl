@@ -1,9 +1,9 @@
 using GreenFunctionMonteCarlo
 import GreenFunctionMonteCarlo as GFMC
+using CairoMakie, MakieHelpers
+using Statistics
 ##
 using Random
-using StableRNGs
-import GreenFunctionMonteCarlo.SmallCollections as SC
 # https://dmrg101-tutorial.readthedocs.io/en/latest/tfim.html
 function getTFI(Nsites, h, J, rng=Random.default_rng())
     Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
@@ -16,7 +16,7 @@ function getTFI(Nsites, h, J, rng=Random.default_rng())
     end
 
     function σz(i, conf)
-        return 0.5*(1-2*conf[i])
+        return (1-2*conf[i])
     end
     function Hxx(conf)
         
@@ -30,31 +30,51 @@ function E_critPoint(L)
     return 1 - csc(pi / (2 * (2 * L + 1)))
 end
 
-RNG = StableRNG(1234)
-NSites = 20
-(Hilbert,H) = getTFI(NSites,1,1)
-
-config = BosonConfig(Hilbert)
-
-rand!(RNG,config)
-
 # logψ = Jastrow(config,Float64)
 # params = get_params(logψ)
 # rand!(RNG,params)
 # params .*= 1e-3
 # logψ.v_ij .= GFMC.LinearAlgebra.Symmetric(logψ.v_ij)
+
+function makeRuns(prob,ConfSaver,Nruns)
+
+    res = Vector{typeof(ConfSaver)}(undef,Nruns)
+    Threads.@threads for i in 1:Nruns
+        newProb = deepcopy(prob)
+        rand!.(newProb.WE.Configs)
+
+        newConfSaver = deepcopy(ConfSaver)
+        runGFMC!(newProb, NoObserver(), 100,logger = NoLogger())
+        runGFMC!(newProb, newConfSaver, NSteps,logger = NoLogger())
+        res[i] = newConfSaver
+    end
+    return res
+end
+
+
+NSites = 20
+(Hilbert,H) = getTFI(NSites,1,1)
+
+config = BosonConfig(Hilbert)
+
 logψ = EqualWeightSuperposition()
 
-NWalkers = 10000
-NSteps = 1000
+NWalkers = 28*20
+NSteps = 8000
 CT = ContinuousTimePropagator(0.1,-12.0)
-# logger = GFMC.SimpleLogger(10)
-logger = GFMC.ProgressBarLogger(dt=0.01)
 prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert,parallelization = GFMC.SingleThreaded())
 ConfSaver = ConfigObserver(config, NSteps,NWalkers)
 
-runGFMC!(prob, NoObserver(), 100;rng= RNG)
+results = makeRuns(prob,ConfSaver,20)
+# (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaver
+##
+energies = getEnergies.(results,100)
 
-runGFMC!(prob, ConfSaver, NSteps;rng= RNG, logger=ProgressBarLogger())
-println("E_ex = ", E_critPoint(NSites))
-(;SaveConfigs,TotalWeights,energies,reconfigurationTable) = ConfSaver
+let 
+    fig = Figure()
+    ax = Axis(fig[1, 1])
+    errlines!(ax,mean(energies),std(energies),label="E")
+    hlines!(ax,[E_critPoint(NSites),],label="E_ex")
+    fig
+    
+end
