@@ -26,10 +26,10 @@ that can be applied to the configuration of the system being simulated.
 Base.size(A::AbstractConfig) = size(parent(A))
 Base.getindex(A::AbstractConfig, i::Int) = getindex(parent(A), i)
 Base.getindex(A::AbstractConfig, I::Vararg{Int,N}) where N = getindex(parent(A), I...)
-Base.getindex(A, I...) = getindex(parent(A), I...)
+Base.getindex(A::AbstractConfig, I...) = getindex(parent(A), I...)
 
 Base.IndexStyle(A::AbstractConfig) = IndexStyle(parent(A))
 
 Base.setindex!(A::AbstractConfig, v, i::Int) = setindex!(parent(A), v, i)
 Base.setindex!(A::AbstractConfig, v, I::Vararg{Int,N}) where N = setindex!(parent(A), v, I...)
-Base.setindex!(A, X, I...) = setindex!(parent(A), X, I...)
+Base.setindex!(A::AbstractConfig, X, I...) = setindex!(parent(A), X, I...)
