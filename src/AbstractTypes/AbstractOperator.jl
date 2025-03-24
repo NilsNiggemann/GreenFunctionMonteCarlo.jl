@@ -38,7 +38,7 @@ abstract type AbstractSignFreeOperator <: AbstractOperator end
 """
     get_offdiagonal_elements(O::AbstractSignFreeOperator)
 
-Return the weights associated with an `OffdiagonalOperator` object `O`. 
+Return the weights associated with an `AbstractSignFreeOperator` object `O`. 
 """
 function get_offdiagonal_elements end
 

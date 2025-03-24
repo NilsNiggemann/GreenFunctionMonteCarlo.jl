@@ -18,7 +18,7 @@ function write_log(logger::SimpleLogger, i, range, Walkers::AbstractWalkerEnsemb
         try
             showvals = generate_showvalues(i, Walkers, Observables, reconfiguration)
             for (name, value) in showvals
-                (name, value) === _empty_log() && continue
+                (name, value) === empty_log() && continue
                 print("$name: $value  ")
             end
             println()
