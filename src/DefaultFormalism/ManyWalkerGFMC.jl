@@ -24,9 +24,8 @@ function _get_markov_weights!(weights::AbstractVector,x::AbstractConfig,H::Abstr
         move = get_move(H,i)
         weights[i] = log_psi_diff(x,move,logψ,Buffer,Hilbert)
     end
-    
-    LoopVectorization.@turbo for i in eachindex(weights)
-        weights[i] = -exp(weights[i]) * Hxy[i]
+    LoopVectorization.@turbo for i in eachindex(Hxy,weights)
+        weights[i] = -Hxy[i]*exp(weights[i])
     end
     return weights
 end
@@ -134,9 +133,9 @@ struct GFMCProblem{WE<:AbstractWalkerEnsemble,Prop<:AbstractPropagator,GF<:Abstr
     reconfiguration::RS
 end
 
-function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,logψ::AbstractGuidingFunction;parallelization = MultiThreaded(NWalkers))
+function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,logψ::AbstractGuidingFunction;parallelization = MultiThreaded(NWalkers),reconfiguration = MinimalReconfiguration(NWalkers))
     WE = allocate_walkerEnsemble(config,logψ,NWalkers,H)
-    reconfiguration = MinimalReconfiguration(NWalkers)
+
     moves_vals = get_offdiagonal_elements(H)
     
     for (i) in eachindex(moves_vals)
@@ -174,14 +173,14 @@ A `GFMCProblem` instance configured with the specified parameters.
 # Notes
 - The `logψ` and `logpsi` parameters are interchangeable and exactly one needs to be provided.
 """
-function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator; H, Hilbert, logψ = nothing, logpsi = nothing,parallelization = MultiThreaded(NWalkers))
+function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator; H, Hilbert, logψ = nothing, logpsi = nothing,kwargs...)
     
     if logψ !== nothing && logpsi !== nothing
         throw(ArgumentError("Only one of `logψ` or `logpsi` can be specified."))
     end
 
     GWF = logψ !== nothing ? logψ : logpsi
-    return GFMCProblem(config,NWalkers,prop,H, Hilbert, GWF; parallelization)
+    return GFMCProblem(config,NWalkers,prop,H, Hilbert, GWF; kwargs...)
 end
 
 """

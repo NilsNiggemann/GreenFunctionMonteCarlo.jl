@@ -27,7 +27,7 @@ function write_log(logger::ProgressBarLogger, i, range, Walkers::AbstractWalkerE
 
     showValFunc() = generate_showvalues(i, Walkers, Observables, reconfiguration)
 
-    ProgressMeter.next!(logger.p,showvalues = showValFunc();desc = "running GFMC... $i/$(last(range))")
+    ProgressMeter.next!(logger.p,showvalues = showValFunc();desc = "GFMC step... $i/$(last(range))")
     try
         1
     catch e

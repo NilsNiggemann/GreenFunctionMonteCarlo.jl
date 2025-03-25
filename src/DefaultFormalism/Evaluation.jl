@@ -19,8 +19,7 @@ function precomputeNormalizedAccWeight(weights,PMax;normalize=true)
 end
 
 function getEnergies(weights,localEnergies,PMax;
-    Gnp = precomputeNormalizedAccWeight(weights,PMax)
-    )
+    Gnp = precomputeNormalizedAccWeight(weights,PMax),)
     
     N = lastindex(localEnergies)
     num = zeros(PMax)
@@ -34,13 +33,13 @@ function getEnergies(weights,localEnergies,PMax;
     return num ./denom
 end
 
-function getEnergies(Obs::BasicObserver,PMax);
-    return getEnergies(Obs.TotalWeights,Obs.energies,PMax)
+function getEnergies(Obs::BasicObserver,PMax;n_equilibration=1)
+    @views getEnergies(Obs.TotalWeights[n_equilibration:end],Obs.energies[n_equilibration:end],PMax)
 end
 
-function getEnergies(Obs::CombinedObserver,PMax);
+function getEnergies(Obs::CombinedObserver,PMax;kwargs...);
     for O in Obs.Observers
-        O isa BasicObserver && return getEnergies(O,PMax)
+        O isa BasicObserver && return getEnergies(O,PMax;kwargs...)
     end
     error("No BasicObserver found in CombinedObserver. Consider explicitly running `getEnergies(weights,localEnergies,PMax)` instead")
 end
