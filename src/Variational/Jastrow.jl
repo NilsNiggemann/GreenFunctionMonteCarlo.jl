@@ -19,7 +19,10 @@ struct Jastrow{T<:Real} <: AbstractGuidingFunction
     v_ij::Matrix{T}
     buffer_reset_max::Int
 end
-Jastrow(m_i::AbstractVector,v_ij::AbstractMatrix; buffer_reset_max=3_000) = Jastrow(m_i,v_ij,buffer_reset_max)
+Jastrow(m_i::AbstractVector,v_ij::AbstractMatrix; buffer_reset_max=3_000) = Jastrow(m_i,_make_symmetric(v_ij),buffer_reset_max)
+Jastrow(conf::AbstractArray,args...;kwargs...) = Jastrow(length(conf),args...;kwargs...)
+
+_make_symmetric(v::AbstractMatrix) = copy(v) .= LinearAlgebra.Symmetric(v)
 
 function Jastrow(N::Int,Type = Float32; buffer_reset_max=3_000)
     m_i = zeros(Type,N)
@@ -27,7 +30,6 @@ function Jastrow(N::Int,Type = Float32; buffer_reset_max=3_000)
     return Jastrow(m_i,v_ij,buffer_reset_max)
 end
 
-Jastrow(conf::AbstractArray,args...;kwargs...) = Jastrow(length(conf),args...;kwargs...)
 
 get_m_i(logψ::Jastrow) = logψ.m_i
 get_v_ij(logψ::Jastrow) = logψ.v_ij
@@ -133,7 +135,6 @@ end
 
 @inline function log_psi_diff(Config::AbstractConfig, move::AbstractMove, logψ::Jastrow{T}, Buffer::SimpleJastrow_GWF_Buffer, Hilbert::AbstractHilbertSpace) where T
     isapplicable(Config,move, Hilbert) || return -Inf
-
     (;h_i) = Buffer
     
     sites = affected_sites(move)
