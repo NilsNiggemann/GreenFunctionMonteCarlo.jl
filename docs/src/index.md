@@ -1,7 +1,9 @@
 # GreenFunctionMonteCarlo
 
-*Documentation goes here.*
+```@contents
+```
 
+## Internal API
 ```@docs
 GreenFunctionMonteCarlo.AbstractObserver
 GreenFunctionMonteCarlo.AbstractPropagator
