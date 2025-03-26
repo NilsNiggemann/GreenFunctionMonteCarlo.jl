@@ -30,9 +30,9 @@ module GreenFunctionMonteCarlo
     export SingleThreaded, MultiThreaded
     
     
-    include("Observers.jl/BasicObserver.jl")
-    include("Observers.jl/CombinedObserver.jl")
-    include("Observers.jl/ConfigObserver.jl")
+    include("Observers/BasicObserver.jl")
+    include("Observers/CombinedObserver.jl")
+    include("Observers/ConfigObserver.jl")
     export BasicObserver, ConfigurationObserver, ConfigObserver
 
     include("DefaultFormalism/BosonicConfig.jl")
