@@ -2,7 +2,6 @@ using TestItemRunner, Test
 @run_package_tests
 
 @testitem "Bosonic Configuration Tests" begin
-
     include("utils.jl")
     Hilbert = BosonHilbertSpace(10, OccupationNumberConstraint(0, 1))
     RNG = StableRNG(1234)
@@ -219,14 +218,30 @@ end
             NWalkers = 20
             NSteps = 10
             CT = ContinuousTimePropagator(1.)
-            prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert,parallelization = GFMC.SingleThreaded())
-        
+
+            RNG = StableRNG(1234)
+            RNG_jastrow = StableRNG(1234)
+            
+            prob = GFMCProblem(config, NWalkers, CT; logψ=NaiveFunction(logψ), H, Hilbert,parallelization = GFMC.SingleThreaded())
+            prob_jastrow = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert,parallelization = GFMC.SingleThreaded())
+            
             ConfSaver = ConfigObserver(config, NSteps,NWalkers)
+            ConfSaver_jastrow = ConfigObserver(config, NSteps,NWalkers)
 
-            runGFMC!(prob, ConfSaver, NSteps;rng = RNG,logger = ProgressBarLogger(dt=0.1))
 
-            (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = GFMC.getObs(ConfSaver)
+
+            runGFMC!(prob, ConfSaver, NSteps;rng = RNG,logger = nothing)
+            runGFMC!(prob_jastrow, ConfSaver_jastrow, NSteps;rng = RNG_jastrow,logger = nothing)
+
+            (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = GFMC.getObs(ConfSaver_jastrow)
             testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)
+
+            Obs_reference = GFMC.getObs(ConfSaver)
+
+            @test Obs_reference.SaveConfigs == SaveConfigs
+            @test Obs_reference.TotalWeights ≈ TotalWeights atol = 1e-10
+            @test Obs_reference.energies ≈ energies atol = 1e-10
+            @test Obs_reference.reconfigurationTable == reconfigurationTable
         end
     end
 end
