@@ -12,9 +12,8 @@
 <!-- [![Build Status](https://travis-ci.com/NilsNiggemann/GreenFunctionMonteCarlo.jl.svg?branch=master)](https://travis-ci.com/NilsNiggemann/GreenFunctionMonteCarlo.jl) -->
 <!-- NOTE: Codecov.io badge now depends on the token, copy from their site after setting up -->
 <!-- Documentation -- uncomment or delete as needed -->
-<!--
-[![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://NilsNiggemann.github.io/GreenFunctionMonteCarlo.jl/stable)
+
+<!-- [![Documentation](https://img.shields.io/badge/docs-stable-blue.svg)](https://NilsNiggemann.github.io/GreenFunctionMonteCarlo.jl/stable) -->
 [![Documentation](https://img.shields.io/badge/docs-master-blue.svg)](https://NilsNiggemann.github.io/GreenFunctionMonteCarlo.jl/dev)
--->
 <!-- Aqua badge, see test/runtests.jl -->
 <!-- [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) -->
