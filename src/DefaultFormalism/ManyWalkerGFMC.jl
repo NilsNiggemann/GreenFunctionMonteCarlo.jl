@@ -1,14 +1,3 @@
-struct ManyWalkerEnsemble{ConfType} <: AbstractWalkerEnsemble
-    Configs::Vector{ConfType}
-    WalkerWeights::Vector{Float64}
-    MoveWeights::Vector{Vector{Float64}}
-    Buffers::Vector{AbstractGuidingFunctionBuffer}
-end
-getConfig(X::ManyWalkerEnsemble,α) = X.Configs[α]
-getMoveWeights(X::ManyWalkerEnsemble,α) = X.MoveWeights[α]
-getWalkerWeights(X::ManyWalkerEnsemble) = X.WalkerWeights
-getBuffer(X::ManyWalkerEnsemble,α) = X.Buffers[α]
-
 function get_markov_weights!(weights::AbstractVector,x::AbstractConfig,H::AbstractSignFreeOperator,logψ::AbstractGuidingFunction,Hilbert::AbstractHilbertSpace,Buffer::AbstractGuidingFunctionBuffer)
     pre_move_affect!(Buffer,x,logψ) 
     _get_markov_weights!(weights,x,H,logψ,Hilbert,Buffer)
@@ -22,7 +11,7 @@ function _get_markov_weights!(weights::AbstractVector,x::AbstractConfig,H::Abstr
     Hxy = get_offdiagonal_elements(H)
     for i in eachindex(weights)
         move = get_move(H,i)
-        weights[i] = log_psi_diff(x,move,logψ,Buffer,Hilbert)
+        weights[i] = log_psi_diff(x, move, logψ, Buffer, Hilbert)
     end
     LoopVectorization.@turbo for i in eachindex(Hxy,weights)
         weights[i] = -Hxy[i]*exp(weights[i])

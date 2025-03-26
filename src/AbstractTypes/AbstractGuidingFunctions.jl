@@ -62,15 +62,23 @@ Allocates a specified number of guiding wave function (GWF) buffers.
 # Returns
 - An array filled with `NBuffers` instances of `AbstractGuidingFunctionBuffer`. Defaults to an array of `NotImplementedBuffer` instances.
 """
-allocate_GWF_buffers(logψ::AbstractGuidingFunction, x, NBuffers) = fill(allocate_GWF_buffer(logψ,x),NBuffers)
+function allocate_GWF_buffers(logψ::AbstractGuidingFunction, x, NBuffers)
+    Buff1 = allocate_GWF_buffer(logψ,x)
+    allBuffs = Vector{typeof(Buff1)}(undef,NBuffers)
+    Threads.@threads for i in 1:NBuffers
+        allBuffs[i] = allocate_GWF_buffer(logψ,x)
+    end
+    return allBuffs
+end
 
-compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer,x,logψ::AbstractGuidingFunction) = Buffer
+
+compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer,logψ::AbstractGuidingFunction,x) = Buffer
 
 function compute_GWF_buffers!(Walkers::AbstractWalkerEnsemble,logψ::AbstractGuidingFunction,x)
     Buffers = getBuffers(Walkers)
     X = getConfigs(Walkers)
     Threads.@threads for i in eachindex(Buffers,X)
-        compute_GWF_buffer!(Buffers[i],X[i],logψ)
+        compute_GWF_buffer!(Buffers[i],logψ,X[i])
     end
     return Buffers
 end
