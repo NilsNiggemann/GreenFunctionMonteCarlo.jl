@@ -214,6 +214,19 @@ end
             TestWFRatio(logψ,config,H,Hilbert)
         end
         
+        @testset "post_move" begin
+            Buff = GFMC.allocate_GWF_buffer(logψ,config)
+            move = H.moves[2]
+            xpr = copy(config)
+            apply!(xpr,move)
+            GFMC.post_move_affect!(Buff,xpr,move,logψ)
+
+            Buff2 = GFMC.allocate_GWF_buffer(logψ,xpr)
+
+            @test Buff.h_i ≈ Buff2.h_i atol = 1e-14
+        end
+        
+        
         @testset "run Jastrow" begin
             NWalkers = 20
             NSteps = 10

@@ -58,7 +58,6 @@ function TestWFRatio(logψ,conf,H,Hilbert;tol=1e-10)
     psiname = GFMC.guidingfunc_name(logψ)
 
     GFMC.compute_GWF_buffer!(Buff,logψ,conf)
-
     @testset "$psiname ψ(x´) / ψ(x)" begin
         for m in H.moves
             GFMC.isapplicable(conf,m,Hilbert) || continue

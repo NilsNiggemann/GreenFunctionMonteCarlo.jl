@@ -19,6 +19,7 @@ struct Jastrow{T<:Real} <: AbstractGuidingFunction
     v_ij::Matrix{T}
     buffer_reset_max::Int
 end
+Jastrow(m_i::AbstractVector,v_ij::AbstractMatrix; buffer_reset_max=3_000) = Jastrow(m_i,v_ij,buffer_reset_max)
 
 function Jastrow(N::Int,Type = Float32; buffer_reset_max=3_000)
     m_i = zeros(Type,N)
@@ -57,7 +58,7 @@ end
 struct SimpleJastrow_GWF_Buffer{T<:Number} <: AbstractGuidingFunctionBuffer
     x_i::Vector{T}
     h_i::Vector{T}
-    buffer_reset_counter::Ref{Int}
+    buffer_reset_counter::Array{Int,0}
     # prefac_moves::Matrix{T}
 end
 
@@ -72,7 +73,7 @@ end
 
 function allocate_GWF_buffer(logψ::Jastrow{T},conf) where T
     h_i = zeros(T,length(conf))
-    buffer_reset_counter = Ref(0)
+    buffer_reset_counter = zeros(Int)
     # prefac_moves = _precompute_prefac_moves(logψ,S)
     x_i = zeros(T,length(conf))
     Buff =  SimpleJastrow_GWF_Buffer(x_i,h_i,buffer_reset_counter)
@@ -91,6 +92,7 @@ Base.@propagate_inbounds function compute_GWF_buffer!(Buffer::SimpleJastrow_GWF_
     x = parent(config)
     @boundscheck checkbounds(x,axes(v,1))
     @boundscheck checkbounds(h,axes(v,1))
+    @boundscheck checkbounds(h,axes(v,2))
 
     LoopVectorization.@turbo for i in axes(v,1)
         hi = m[i]
@@ -118,14 +120,14 @@ function post_move_affect!(Buffer::SimpleJastrow_GWF_Buffer,Config::AbstractConf
     end
     
     for (idx,i) in enumerate(sites)
-        s = dx[idx]
+        s = -dx[idx]
         
         LoopVectorization.@turbo for j in eachindex(h)
         # for j in eachindex(h)
             h[j] += v[j,i]*s
         end
     end
-
+    buffer_reset_counter[] += 1
     return Buffer
 end
 
