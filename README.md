@@ -56,6 +56,7 @@ Pkg.add(url = "https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl.git")
 ## Documentation
 
 For detailed documentation, including API references and advanced usage, visit the [documentation site](https://NilsNiggemann.github.io/GreenFunctionMonteCarlo.jl/dev).
+For an example, see [this section](https://nilsniggemann.github.io/GreenFunctionMonteCarlo.jl/dev/Example_transverseFieldIsing/).
 
 ## Contributing
 
