@@ -36,8 +36,9 @@ where $H_{x, x'}$ is the matrix element of the Hamiltonian between two configura
 - [x] Constraints, such as hardcore boson constraint.
 - [x] Interface for the efficient implementation of arbitrary constraints.
 - [ ] Measure arbitrary observables in the diagonal basis.
+- [ ] Measure offdiagonal observables via `straight-forward` walking.
 - [ ] Allow more direct implementation of spin models.
-- [ ] Allow for easy conversions of Hamiltonians and variational wavefunctions from netket.
+- [ ] Allow for easy conversions of Hamiltonians and variational wavefunctions from [Netket](https://netket.readthedocs.io/en/stable/).
 
 ## Limitations
 - The package is currently in the experimental stage and exported functionality may change or break in the future.
