@@ -1,10 +1,51 @@
+"""
+    ZeroDiagOperator <: DiagonalOperator
+
+A struct representing a diagonal operator `H_xx = 0`
+"""
 struct ZeroDiagOperator <: DiagonalOperator end
 (::ZeroDiagOperator)(x::AbstractConfig) = 0.
 
+"""
+    DiagOperator{F} <: DiagonalOperator
+
+A type that can hold an arbitrary function `H_xx = f(x)` as a diagonal operator.
+"""
 struct DiagOperator{F} <: DiagonalOperator
     f::F
 end
 (F::DiagOperator)(x::AbstractConfig) = F.f(x)
+
+"""
+    OneBodyDiagOperator{T<:AbstractVector} <: DiagonalOperator
+
+A type that represents arbitrary diagonal one-body interactions `H_xx = sum_{i} m_i x_i`
+"""
+struct OneBodyDiagOperator{T<:AbstractVector} <: DiagonalOperator
+    m_i::T
+end
+(Hxx::OneBodyDiagOperator)(x::AbstractConfig) =  LinearAlgebra.dot(Hxx.m_i, x)
+
+"""
+    TwoBodyDiagOperator{T<:AbstractMatrix} <: DiagonalOperator
+
+A type that represents arbitrary diagonal two-body interactions `H_xx = sum_{i,j} v_ij x_i x_j`
+"""
+struct TwoBodyDiagOperator{T<:AbstractMatrix} <: DiagonalOperator
+    v_ij::T
+end
+(Hxx::TwoBodyDiagOperator)(x::AbstractConfig) =  LinearAlgebra.dot(x,Hxx.v_ij, x)
+
+
+struct DiagOperatorSum{T<:Tuple} <: DiagonalOperator
+    terms::T
+end
+(O::DiagOperatorSum)(x::AbstractConfig) = sum(term(x) for term in O.terms)
+
+Base.:+(A::DiagonalOperator, B::DiagonalOperator) = DiagOperatorSum((A,B))
+Base.:+(A::DiagOperatorSum, B::DiagonalOperator) = DiagOperatorSum((A...,B))
+Base.:+(A::DiagonalOperator, B::DiagOperatorSum) = DiagOperatorSum((A,B...))
+Base.:+(A::DiagOperatorSum, B::DiagOperatorSum) = DiagOperatorSum((A...,B...))
 
 struct SparseMove{T,V1<:AbstractVector{Int},V2<:AbstractVector{T}} <: AbstractMove
     inds::V1

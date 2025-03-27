@@ -40,7 +40,7 @@ module GreenFunctionMonteCarlo
     include("DefaultFormalism/WalkerEnsemble.jl")
 
     include("DefaultFormalism/LocalOperator.jl")
-    export LocalOperator, DiagOperator, localOperator, SparseMove
+    export LocalOperator, ZeroDiagOperator, DiagOperator, OneBodyDiagOperator, TwoBodyDiagOperator, DiagOperatorSum, localOperator, SparseMove
 
     include("Reconfiguration/MinimalReconfiguration.jl")
 

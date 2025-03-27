@@ -77,7 +77,31 @@ end
 end
 
 ##
+@testitem "Diagonal Operator Tests" begin
+    include("utils.jl")
+    Nsites = 5
+    Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
+    x = BosonConfig(Hilbert)
+    
+    rand!(x)
 
+    RNG = StableRNG(1234)
+    d = rand(RNG, Nsites)
+    v = rand(RNG, Nsites, Nsites)
+
+    H1 = OneBodyDiagOperator(d)
+    H2 = TwoBodyDiagOperator(v)
+
+    Hsum = H1 + H2
+
+    @testset "Diagonal Operators" begin
+        @test Hsum isa DiagOperatorSum
+        @test H1(x) == d'*x
+        @test H2(x) == x'v*x
+        @test Hsum(x) == H1(x)+H2(x)
+    end
+end
+##
 @testitem "Bosonic Walker Ensemble Tests" begin
     include("utils.jl")
     Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
