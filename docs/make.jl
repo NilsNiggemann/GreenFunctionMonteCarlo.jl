@@ -7,7 +7,7 @@ makedocs(
     format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
     authors = "Nils Niggemann",
     sitename = "GreenFunctionMonteCarlo.jl",
-    pages = Any["index.md"],
+    pages = Any["index.md","Example_transverseFieldIsing.md","Reference.md"],
     # strict = true,
     # clean = true,
     # checkdocs = :exports,

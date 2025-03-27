@@ -3,48 +3,15 @@
 ```@contents
 ```
 
-## Internal API
-```@docs
-GreenFunctionMonteCarlo.AbstractObserver
-GreenFunctionMonteCarlo.AbstractPropagator
-GreenFunctionMonteCarlo.AbstractGFMCProblem
-GreenFunctionMonteCarlo.AbstractOperator
-GreenFunctionMonteCarlo.AbstractHilbertSpace
-GreenFunctionMonteCarlo.AbstractConstraint
-GreenFunctionMonteCarlo.AbstractSignFreeOperator
-GreenFunctionMonteCarlo.AbstractWalkerEnsemble
-GreenFunctionMonteCarlo.AbstractGuidingFunction
-GreenFunctionMonteCarlo.AbstractDiagObservable
-GreenFunctionMonteCarlo.AbstractMove
-GreenFunctionMonteCarlo.AbstractConfig
-GreenFunctionMonteCarlo.AbstractGuidingFunctionBuffer
-GreenFunctionMonteCarlo.AbstractReconfigurationScheme
-GreenFunctionMonteCarlo.GreenFunctionMonteCarlo
-GreenFunctionMonteCarlo.isapplicable
-GreenFunctionMonteCarlo.get_offdiagonal_elements
-GreenFunctionMonteCarlo.InverseMove
-GreenFunctionMonteCarlo.get_move
-GreenFunctionMonteCarlo.allocate_GWF_buffers
-GreenFunctionMonteCarlo.propagateWalkers!
-GreenFunctionMonteCarlo.fulfills_constraint
-GreenFunctionMonteCarlo.DiagonalOperator
-GreenFunctionMonteCarlo.continuos_time_propagation!
-GreenFunctionMonteCarlo.pre_move_affect!
-GreenFunctionMonteCarlo.apply!
-GreenFunctionMonteCarlo.ConfigObserver
-GreenFunctionMonteCarlo.runGFMC!
-GreenFunctionMonteCarlo.minimizeReconfiguration!
-GreenFunctionMonteCarlo.GFMCProblem
-GreenFunctionMonteCarlo.reconfigurateWalkers!
-GreenFunctionMonteCarlo.Jastrow
-GreenFunctionMonteCarlo.NoObserver
-GreenFunctionMonteCarlo.EqualWeightSuperposition
-GreenFunctionMonteCarlo.NoLogger
-GreenFunctionMonteCarlo.SimpleLogger
-GreenFunctionMonteCarlo.ProgressBarLogger
-GreenFunctionMonteCarlo.NaiveFunction
-GreenFunctionMonteCarlo.CombinedObserver
-GreenFunctionMonteCarlo.ConfigurationObserver
-GreenFunctionMonteCarlo.BasicObserver
-GreenFunctionMonteCarlo.ProblemEnsemble
+```@eval
+using Markdown
+function remove_comments(input::String)::String
+    s1 = replace(input, r"<!--.*?-->" => "")
+end
+function strip_to_start(input::String)::String
+    start_index = findfirst(r"<!-- START README \(DO NOT DELETE THIS LINE!\) -->", input)
+    return start_index === nothing ? "" : input[last(start_index)+1:end]
+end
+
+Markdown.parse(strip_to_start(read("../../README.md", String)))
 ```
