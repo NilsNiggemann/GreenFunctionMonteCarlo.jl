@@ -211,12 +211,12 @@ P = ProblemEnsemble([GFMCProblem1, GFMCProblem2, ...])
 
 problems = ProblemEnsemble([GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert) for _ in 1:10])
 
-Observers = [ConfigObserver("output_$i.h5",startConfig, NSteps, NWalkers) for i in 1:10] #note that each observer must have its own file
+Observers = [ConfigObserver("output_\$i.h5",startConfig, NSteps, NWalkers) for i in 1:10] #note that each observer must have its own file
 
 runGFMC!(problems, NoObserver(),100) #equilibrate
 runGFMC!(problems, Observers)
-
 ```
+
 """
 struct ProblemEnsemble{P<:AbstractGFMCProblem} <: AbstractGFMCProblem
     problems::Vector{P}
