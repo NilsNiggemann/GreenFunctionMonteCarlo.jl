@@ -7,9 +7,9 @@ using TestItemRunner, Test
     RNG = StableRNG(1234)
     config = BosonConfig(Hilbert)
     
-    @testset "UInt8 Variables" begin
+    @testset "Int8 Variables" begin
         @test size(config) === (10,)
-        @test config == BosonConfig(zeros(UInt8,10))
+        @test config == BosonConfig(zeros(Int8,10))
         @test fulfills_constraint(config, Hilbert)
         rand!(RNG,config)
         @test !fulfills_constraint(config, Hilbert)
@@ -59,7 +59,7 @@ end
     diag = ZeroDiagOperator()
     local_op = localOperator(moves, weights, diag, Hilbert)
 
-    config = BosonConfig(UInt8[1,1,0])
+    config = BosonConfig(Int8[1,1,0])
     config_Bin = BosonConfig(Bool[1,1,0])
 
     @testset "SparseMove" begin
