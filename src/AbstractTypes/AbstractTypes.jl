@@ -11,3 +11,5 @@ include("AbstractGFMCProblem.jl")
 
 include("AbstractLogger.jl")
 include("AbstractParallelizationScheme.jl")
+
+include("AbstractObservable.jl")

@@ -223,12 +223,14 @@ struct ProblemEnsemble{P<:AbstractGFMCProblem} <: AbstractGFMCProblem
 end
 
 function runGFMC!(P::ProblemEnsemble,Observers,args...;kwargs...)
-    Threads.@threads for (prob,Observer) in zip(P.problems,Observers)
+    Threads.@threads for i in eachindex(P.problems,Observers)
+        prob = P.problems[i]
+        Observer = Observers[i]
         runGFMC!(prob,Observer,args...;kwargs...)
     end
     return Observers
 end
 
 function runGFMC!(P::ProblemEnsemble,Observer::NoObserver,args...;kwargs...)
-    runGFMC!(P::EnsembleGFMCProblem,(NoObserver() for _ in P.problems),args...;kwargs...)
+    runGFMC!(P::ProblemEnsemble,[NoObserver() for _ in P.problems],args...;kwargs...)
 end

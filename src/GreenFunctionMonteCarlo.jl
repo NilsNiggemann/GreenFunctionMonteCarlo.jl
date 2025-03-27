@@ -14,12 +14,13 @@ module GreenFunctionMonteCarlo
     import LinearAlgebra
     import LoopVectorization
     import ProgressMeter
-    
+    import FFTW
+
     include("utils.jl")
     export createMMapArray, readMMapArray
 
     include("AbstractTypes/AbstractTypes.jl")
-    
+
     export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator, AbstractLogger
 
     export ZeroDiagOperator
@@ -69,9 +70,10 @@ module GreenFunctionMonteCarlo
 
     include("Loggers/SimpleLogger.jl")
     export SimpleLogger
-    
+
     include("Loggers/ProgressBarLogger.jl")
     export ProgressBarLogger
 
-        
+    include("Observables/computeObservables.jl")
+    include("Observables/CorrelationFunction.jl")
 end # module
