@@ -6,13 +6,13 @@ An abstract type for all guiding function implementations in Green Function Mont
 - `logψ(x::AbstractArray)`: return the logarithm of the guiding function evaluated at the configuration `x`.
 - `logψ(x::AbstractArray, H::AbstractHilbertSpace)`: return the logarithm of the guiding function evaluated at the configuration `x` in the specified `HilbertSpace`.
 - `log_psi_diff(x::AbstractArray, dx::AbstractArray, logψ::AbstractGuidingFunction, Buffer::AbstractGuidingFunctionBuffer, Hilbert::AbstractHilbertSpace)`: return the logarithm of the ratio of the guiding function evaluated at the configuration `x` and `x+dx` in the specified `HilbertSpace`. Returns `-Inf` if the move is not applicable.
-- get_params(logψ::AbstractGuidingFunction): return the parameters of the guiding function as a linear Array. It is recommended to use RecursiveArrayTools.jl for this purpose.
-- HDF5.h5write(file::AbstractString, name::AbstractString, logψ::AbstractGuidingFunction): write the guiding function to an HDF5 file.
+- `get_params(logψ::AbstractGuidingFunction)`: return the parameters of the guiding function as a linear Array. It is recommended to use RecursiveArrayTools.jl for this purpose.
 # Interface (optional)
-- allocate_GWF_buffers(logψ::AbstractGuidingFunction, NBuffers::Integer): allocate NBuffers instances of a buffer for the guiding function. Defaults to an array of EmptyGWFBuffer instances.
-- compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer, logψ::AbstractGuidingFunction, x): compute the full buffer for the guiding function at the configuration `x`. 
-- pre_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, moves, logψ::AbstractGuidingFunction): perform any necessary operations before computing ratios ψx´_ψx.
-- post_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, dx, logψ::AbstractGuidingFunction): perform any necessary operations after the move is applied.
+- `allocate_GWF_buffers(logψ::AbstractGuidingFunction, NBuffers::Integer)`: allocate NBuffers instances of a buffer for the guiding function. Defaults to an array of EmptyGWFBuffer instances.
+- `compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer, logψ::AbstractGuidingFunction, x)`: compute the full buffer for the guiding function at the configuration `x`. 
+- `pre_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, moves, logψ::AbstractGuidingFunction)`: perform any necessary operations before computing ratios ψx´_ψx.
+- `post_move_affect!(Buffer::AbstractGuidingFunctionBuffer, x, dx, logψ::AbstractGuidingFunction)`: perform any necessary operations after the move is applied.
+- `HDF5.h5write(file::AbstractString, name::AbstractString, logψ::AbstractGuidingFunction)`: write the guiding function to an HDF5 file.
 """
 abstract type AbstractGuidingFunction end
 

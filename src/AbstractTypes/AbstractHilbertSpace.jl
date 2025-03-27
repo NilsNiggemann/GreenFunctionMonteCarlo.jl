@@ -6,6 +6,6 @@ An abstract type representing a Hilbert space. This type serves as a base for de
 - `constraint(HilbertSpace::AbstractHilbertSpace)`: Return the constraint that the configurations in the Hilbert space must satisfy.
 - `Base.size(HilbertSpace::AbstractHilbertSpace)`: Return the size of a config in the Hilbert space.
 # Interface (optional)
-- fulfills_constraint(x,HilbertSpace::AbstractHilbertSpace): Check if the given configuration `x` satisfies the constraint of the specified `HilbertSpace`. Defaults to `constraint(HilbertSpace)(x)`.
+- `fulfills_constraint(x,HilbertSpace::AbstractHilbertSpace)`: Check if the given configuration `x` satisfies the constraint of the specified `HilbertSpace`. Defaults to `constraint(HilbertSpace)(x)`.
 """
 abstract type AbstractHilbertSpace end

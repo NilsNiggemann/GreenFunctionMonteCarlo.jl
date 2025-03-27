@@ -13,13 +13,13 @@ abstract type OffdiagonalOperator end
 An abstract type representing a diagonal operator in the context of Green Function Monte Carlo simulations.
 A diagonal operator is special in the sense that it will not change the configuration of the system when applied to it and will only return a number.
 # Interface: 
-- (D::DiagonalOperator)(x) : return the value of the operator applied to the configuration `x`
-- (D::DiagonalOperator)(x, params): return the value of the operator applied to the configuration `x` with parameters `params`, which can be used to store buffers.
+- `(D::DiagonalOperator)(x)` : return the value of the operator applied to the configuration `x`
+- `(D::DiagonalOperator)(x, params)`: return the value of the operator applied to the configuration `x` with parameters `params`, which can be used to store buffers.
 """
 abstract type DiagonalOperator end
 
 """
-    get_move(O::AbstractOperator,idx::Integer)
+    `get_move(O::AbstractOperator,idx::Integer)`
 Return the move associated with the operator `O` at index `idx`. 
 """
 function get_move end
@@ -31,8 +31,8 @@ function (D::DiagonalOperator) end
 
 An abstract type representing a sign-free operator in the context of Green Function Monte Carlo simulations. 
 # Interface:
-- get_diagonal(O::AbstractSignFreeOperator): return the diagonal operator associated with the sign-free operator `O`
-- get_offdiagonal_elements(O::AbstractSignFreeOperator): return the weights associated with the off-diagonal operator `O`
+- `get_diagonal(O::AbstractSignFreeOperator)`: return the diagonal operator associated with the sign-free operator `O`
+- `get_offdiagonal_elements(O::AbstractSignFreeOperator)`: return the weights associated with the off-diagonal operator `O`
 """
 abstract type AbstractSignFreeOperator <: AbstractOperator end
 """
@@ -57,8 +57,8 @@ and implement the required functionality.
 # Interface
 - `apply!(x::AbstractConfig, move::AbstractMove)`: Apply the move to the configuration `x`.
 - `isapplicable(x::AbstractConfig, move::AbstractMove, HilbertSpace::AbstractHilbertSpace)`: Check if the move is applicable to the configuration `x` within the specified `HilbertSpace`.
-- affected_sites(move::AbstractMove): Return the sites affected by the move.
-- move_dx(move::AbstractMove,x::AbstractConfig): Return the values of the move applied to the configuration `x`. i.e. the change in x when the move is applied.
+- `affected_sites(move::AbstractMove)`: Return the sites affected by the move.
+- `move_dx(move::AbstractMove,x::AbstractConfig)`: Return the values of the move applied to the configuration `x`. i.e. the change in x when the move is applied.
 """
 abstract type AbstractMove end
 
