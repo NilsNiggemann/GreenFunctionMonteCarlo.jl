@@ -199,3 +199,36 @@ function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range; logger 
     end
     runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,logger,rng)
 end
+
+"""
+    ProblemEnsemble{P<:AbstractGFMCProblem} <: AbstractGFMCProblem
+
+Run multiple GFMC problems in parallel. Useful to estimate errors.
+
+# Usage example:
+```
+P = ProblemEnsemble([GFMCProblem1, GFMCProblem2, ...])
+
+problems = ProblemEnsemble([GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert) for _ in 1:10])
+
+Observers = [ConfigObserver("output_$i.h5",startConfig, NSteps, NWalkers) for i in 1:10] #note that each observer must have its own file
+
+runGFMC!(problems, NoObserver(),100) #equilibrate
+runGFMC!(problems, Observers)
+
+```
+"""
+struct ProblemEnsemble{P<:AbstractGFMCProblem} <: AbstractGFMCProblem
+    problems::Vector{P}
+end
+
+function runGFMC!(P::ProblemEnsemble,Observers,args...;kwargs...)
+    Threads.@threads for (prob,Observer) in zip(P.problems,Observers)
+        runGFMC!(prob,Observer,args...;kwargs...)
+    end
+    return Observers
+end
+
+function runGFMC!(P::ProblemEnsemble,Observer::NoObserver,args...;kwargs...)
+    runGFMC!(P::EnsembleGFMCProblem,(NoObserver() for _ in P.problems),args...;kwargs...)
+end

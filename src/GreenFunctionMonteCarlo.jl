@@ -28,8 +28,7 @@ module GreenFunctionMonteCarlo
     export propagateWalkers!, fulfills_constraint, InverseMove, apply!, get_params
 
     export SingleThreaded, MultiThreaded
-    
-    
+
     include("Observers/BasicObserver.jl")
     include("Observers/CombinedObserver.jl")
     include("Observers/ConfigObserver.jl")
@@ -39,21 +38,21 @@ module GreenFunctionMonteCarlo
     export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, HardCoreConstraint, fulfills_constraint
 
     include("DefaultFormalism/WalkerEnsemble.jl")
-    
+
     include("DefaultFormalism/LocalOperator.jl")
-    export LocalOperator, localOperator, SparseMove
+    export LocalOperator, DiagOperator, localOperator, SparseMove
 
     include("Reconfiguration/MinimalReconfiguration.jl")
 
     include("DefaultFormalism/ManyWalkerGFMC.jl")
-    export NoObserver, runGFMC!, GFMCProblem
+    export NoObserver, runGFMC!, GFMCProblem, ProblemEnsemble
 
     include("DefaultFormalism/ContinuousTimePropagator.jl")
     export ContinuousTimePropagator
 
     include("DefaultFormalism/Evaluation.jl")
     export getEnergies, precomputeNormalizedAccWeight
-    
+
     include("Variational/EqualWeightSuperposition.jl")
     export EqualWeightSuperposition
 

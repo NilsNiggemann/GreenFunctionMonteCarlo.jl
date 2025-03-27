@@ -46,4 +46,5 @@ GreenFunctionMonteCarlo.NaiveFunction
 GreenFunctionMonteCarlo.CombinedObserver
 GreenFunctionMonteCarlo.ConfigurationObserver
 GreenFunctionMonteCarlo.BasicObserver
+GreenFunctionMonteCarlo.ProblemEnsemble
 ```
