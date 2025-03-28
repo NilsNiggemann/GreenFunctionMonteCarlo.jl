@@ -42,7 +42,15 @@ function reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,reconfiguration::
     end
 end
 
-"""given a list of reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index."""
+"""
+    minimizeReconfiguration!(list)
+
+
+given a list of reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index.
+
+# Arguments
+- `list`: A collection (e.g., an array) that will be reconfigured in-place.
+"""
 function minimizeReconfiguration!(list)
     N = length(list)
     index_map = Dict(α′ => α for (α, α′) in enumerate(list))

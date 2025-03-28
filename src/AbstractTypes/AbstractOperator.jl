@@ -19,7 +19,7 @@ A diagonal operator is special in the sense that it will not change the configur
 abstract type DiagonalOperator end
 
 """
-    `get_move(O::AbstractOperator,idx::Integer)`
+    get_move(O::AbstractOperator,idx::Integer)
 Return the move associated with the operator `O` at index `idx`. 
 """
 function get_move end
