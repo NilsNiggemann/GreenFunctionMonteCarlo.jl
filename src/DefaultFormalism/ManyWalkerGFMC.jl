@@ -113,7 +113,7 @@ Represents a Green's Function Monte Carlo (GFMC) problem with the following type
 - `RS<:AbstractReconfigurationScheme`: The reconfiguration scheme used to manage walker populations.
 """
 struct GFMCProblem{WE<:AbstractWalkerEnsemble,Prop<:AbstractPropagator,GF<:AbstractGuidingFunction,SFO<:AbstractSignFreeOperator,HS<:AbstractHilbertSpace,PS<:AbstractParallelizationScheme,RS<:AbstractReconfigurationScheme} <: AbstractGFMCProblem
-    WE::WE
+    Walkers::WE
     Propagator::Prop
     H::SFO
     logψ::GF
@@ -197,7 +197,7 @@ function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range; logger 
     if isnothing(logger)
         logger = NoLogger()
     end
-    runGFMC!(prob.WE,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,logger,rng)
+    runGFMC!(prob.Walkers,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,logger,rng)
 end
 
 """
@@ -234,3 +234,5 @@ end
 function runGFMC!(P::ProblemEnsemble,Observer::NoObserver,args...;kwargs...)
     runGFMC!(P::ProblemEnsemble,[NoObserver() for _ in P.problems],args...;kwargs...)
 end
+
+getConfigs(p::GFMCProblem) = RecursiveArrayTools.ArrayPartition(getConfigs(p.Walkers))

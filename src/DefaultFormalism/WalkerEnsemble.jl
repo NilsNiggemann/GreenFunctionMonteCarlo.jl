@@ -7,6 +7,7 @@ struct WalkerEnsemble{ConfType<:AbstractConfig,GWB<:AbstractGuidingFunctionBuffe
 end
 
 getConfig(X::WalkerEnsemble, α) = X.Configs[α]
+getConfigs(X::WalkerEnsemble) = X.Configs
 getMoveWeights(X::WalkerEnsemble, α) = X.MoveWeights[α]
 getWalkerWeights(X::WalkerEnsemble) = X.WalkerWeights
 getBuffer(X::WalkerEnsemble, α) = X.Buffers[α]

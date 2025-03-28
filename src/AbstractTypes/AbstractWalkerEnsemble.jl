@@ -11,6 +11,7 @@ An abstract type that represents an ensemble of configurations (i.e. spins, boso
 # Interface (optional)
 - `Base.eachindex(X::AbstractWalkerEnsemble)`: iterate over the indices of the ensemble.
 - `getNWalkers(X::AbstractWalkerEnsemble)`: get the number of walkers in the ensemble.
+- `getConfigs(X::AbstractWalkerEnsemble)`: get all configurations in the ensemble.
 """
 abstract type AbstractWalkerEnsemble end
 

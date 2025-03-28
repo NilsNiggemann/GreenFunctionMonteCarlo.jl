@@ -1,3 +1,20 @@
+"""
+    ContinuousTimePropagator{T<:AbstractFloat} <: AbstractPropagator
+
+A structure representing a imaginary time projection of a trial wavefunction, also referred to as the "Continuous time limit". 
+
+# Type Parameters
+- `T<:AbstractFloat`: The floating-point type used for numerical computations 
+  (e.g., `Float64`, `Float32`).
+
+# Supertype
+- `AbstractPropagator`: This structure is a subtype of `AbstractPropagator`, 
+  indicating that it implements the required interface for propagators in the 
+  Green Function Monte Carlo framework.
+# Fields 
+- `dτ::T`: The time step for the propagation, which is a floating-point value. A small value may be inefficient in exploring the Hilbert space, while a large value will lead to a more unstable propagation. A good starting point is `dτ = 0.1`.
+- `w_avg_estimate::T`: An estimate of the average weight to reduce floating point errors. Ideally given by the exact ground state energy of the system.
+"""
 struct ContinuousTimePropagator{T<:AbstractFloat} <: AbstractPropagator 
     dτ::T
     w_avg_estimate::T

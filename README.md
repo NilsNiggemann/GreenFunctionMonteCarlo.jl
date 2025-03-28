@@ -37,9 +37,9 @@ where $H_{x, x'}$ is the matrix element of the Hamiltonian between two configura
 - [x] Interface for the efficient implementation of arbitrary constraints.
 - [ ] Measure arbitrary observables in the diagonal basis.
 - [ ] Measure offdiagonal observables via `straight-forward` walking.
+- [ ] Allow for more generic offdiagonal Hamiltonians where $H_{xx'}$ may depend directly on $x$.
 - [ ] Allow more direct implementation of spin models.
 - [ ] Allow for easy conversions of Hamiltonians and variational wavefunctions from [Netket](https://netket.readthedocs.io/en/stable/).
-
 ## Limitations
 - The package is currently in the experimental stage and exported functionality may change or break in the future.
 - Currently, there is no implementation of the fixed-node approximation [\[2\]](#references) for Hamiltonians with the sign problem.

@@ -18,6 +18,24 @@ function precomputeNormalizedAccWeight(weights,PMax;normalize=true)
     return Gnp
 end
 
+"""
+    getEnergies(weights, localEnergies, PMax; kwargs...)
+
+Compute the energies based on the provided weights and local energies, for the projection steps `p = 0,1,2,...,PMax`.
+
+# Arguments
+- `weights`: A collection of weights associated with the samples.
+- `localEnergies`: A collection of local energy values corresponding to the samples.
+- `PMax`: An integer indicating the maximum projection order.
+# Keyword arguments
+- `Gnp`: optionally provided precomputed normalized accumulated weights.
+
+# Returns
+Returns the computed energies based on the input parameters.
+
+# Notes
+Ensure that the dimensions of `weights` and `localEnergies` are compatible.
+"""
 function getEnergies(weights,localEnergies,PMax;
     Gnp = precomputeNormalizedAccWeight(weights,PMax),)
     
