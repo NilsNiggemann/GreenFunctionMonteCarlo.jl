@@ -90,7 +90,7 @@ end
 
 MaxProjection = 40
 energies = getEnergies(Observer, MaxProjection) 
-tau = 0:MaxProjection-1 * dtau
+tau = (0:MaxProjection-1) * dtau
 
 let 
     fig = Figure()
