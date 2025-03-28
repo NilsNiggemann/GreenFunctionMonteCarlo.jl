@@ -1,20 +1,26 @@
-# Example: Transverse Field Ising Model
+# Example: 1D Transverse Field Ising Model
 
 ## Defining the Hamiltonian
 The transverse field Ising model is a quantum spin model that exhibits a quantum phase transition. The Hamiltonian for the model is given by:
 ```math
-H = -J \sum_{\langle i, j \rangle} \sigma_i^z \sigma_j^z - h \sum_i \sigma_i^x
+H = -J \sum_i^L \sigma_i^z \sigma_{i+1}^z - h \sum^L_i \sigma_i^x
 ```
 
 where:
+- $L$ is the number of spins.
 -  $J$ is the interaction strength between neighboring spins.
 -  $h$ is the transverse field strength.
 -  $\sigma^z$ and $\sigma^x$ are Pauli matrices.
+At the critical point $h=1$, the energy for open boundary conditions is given by:
+```math
+E_{crit} = 1 - \cosec \left(\frac{\pi}{2(2L+1)}\right)
+```
+where $L$ is the number of spins.
 
 Below is an example of how to simulate the transverse field Ising model using `GreenFunctionMonteCarlo.jl`:
 
 First, we implement our Hamiltonian. Since our problem is equivalent to a hardcore boson problem, we represent our spin configurations by Booleans for optimal performance.
-```julia
+```@example TFI
 using GreenFunctionMonteCarlo
 
 σz(n::Bool) = (1 - 2 * n)
@@ -46,7 +52,7 @@ end
 # Define parameters
 J = 1.0       # Interaction strength
 h = 1.0       # Transverse field strength
-lattice_size = 6  # Number of spins
+lattice_size = 4  # Number of spins
 periodic = false  # No periodic boundary conditions
 # Define the Hamiltonian
 (;Hilbert,H) = transverse_field_ising(lattice_size, h, J; periodic)
@@ -60,9 +66,9 @@ The Hamiltonian is split into a diagonal and an offdiagonal part. The diagonal $
 
 We now proceed to solve the Hamiltonian. It is instructive to consider a single walker first. As a guiding wavefunction, we use the simplest one, an equal weight superposition of all configurations $\psi(x) =1$.
 
-```julia
-NSteps = 1000  # Number of Monte Carlo steps
-NStepsEquil = 100  # Number of Monte Carlo steps for equilibration
+```@example TFI
+NSteps = 500  # Number of Monte Carlo steps
+NStepsEquil = 30  # Number of Monte Carlo steps for equilibration
 NWalkers = 1  # Number of walkers
 dtau = 0.1    # imaginary time propagation step
 
@@ -75,26 +81,24 @@ runGFMC!(problem, Observer, NSteps) #run for NSteps steps
 ```
 ## Evaluating the Results
 Let's see the results. For open boundary conditions at the critical point $h=J$, we may compare to the exact solution. 
-```julia
+```@example TFI
 using CairoMakie, Statistics, Random
-
+Random.seed!(123) # for reproducibility
 function E_critPoint_exact(L, h=1, periodic=false)
     (!periodic && h==1) || return NaN 
     
     return 1 - csc(pi / (2 * (2 * L + 1)))
 end
 
+MaxProjection = 40
+energies = getEnergies(Observer, MaxProjection) 
+tau = 0:MaxProjection-1 * dtau
+
 let 
-    MaxProjection = 20
-
-    energies = getEnergies(Observer, MaxProjection) 
-    
-    tau = 0:MaxProjection-1 * dtau
-
     fig = Figure()
     ax = Axis(fig[1, 1], xlabel=L"$τ$ (imaginary time)", ylabel=L"Energy$$")
 
-    lines!(ax, tau, energies, label=L"Equal Weight Superposition$$")
+    lines!(ax, tau, energies, label=L"$\psi(x)=1$")
 
     hlines!(ax, E_critPoint_exact(lattice_size,h,periodic), color=:black, label=L"Exact$$", linestyle=:dash)
 
@@ -102,20 +106,20 @@ let
     fig
 end
 ```
-Run the code a few times and see what happens:
+Run the GFMC simulation a few times (with different seeds) and see what happens:
 - At $\tau=0$ (for a single walker!), we will always obtain the variational energy of the guiding wavefunction.
 - The energy initially decreases with the number of projections.
 - However, for larger $\tau$, the energy is strongly affected by statistical fluctuations. It may either increase or go below the exact energy.
 - We may quantify this statistical error by looking at the standard deviation of the energy upon performing several runs (see below).
 - Provided a large enough $\tau$, such that the imaginary time projection is converged, the energy will be within the statistical error of the exact energy.
 
-## Using variational wavefunctions
+## Using Variational Wavefunctions
 
 The issue of errorbars growing exponentially with $\tau$ can be significantly alleviated by using more Walkers, i.e. setting `NWalkers = 10` in the example above, or by using a more sophisticated guiding wavefunction. For example, it is easy to implement a short ranged Jastrow wavefunction which correlates nearest neighbors spins.
 !!! warning
     You must always implement the logarithm of the wavefunction, i.e. $\log \psi(x)$.
 
-```julia
+```@example TFI
 function ShortRangeJastrow(x)
     res = 0.
     for i in eachindex(x)[1:end-1]
@@ -123,26 +127,24 @@ function ShortRangeJastrow(x)
     end
     return res
 end
-logψ = logψJastrow
 logψ = NaiveFunction(ShortRangeJastrow)
-NSteps = 4000
 NWalkers = 10
 P = ProblemEnsemble([GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert) for i in 1:10])
-Observers = [ConfigObserver(startConfig, NSteps, NWalkers) for _ in 1:10]
+Observers_jastrow = [ConfigObserver(startConfig, NSteps, NWalkers) for _ in 1:10]
 
 runGFMC!(P, NoObserver(),200,logger=nothing) #equilibrate
-runGFMC!(P, Observers,NSteps,logger=nothing)
+runGFMC!(P, Observers_jastrow,NSteps,logger=nothing)
 
 
-MaxProjection = 50
-energies_jastrow = [getEnergies(Observer, MaxProjection) for Observer in Observers]
-tau = 0:MaxProjection-1 * dtau
+energies_jastrow = [getEnergies(Observer, MaxProjection) for Observer in Observers_jastrow]
 
 let
     fig = Figure()
     ax = Axis(fig[1, 1], xlabel=L"$τ$ (imaginary time)", ylabel=L"Energy$$")
 
-    lines!(ax, tau, mean(energies_jastrow), label=L"Jastrow Wavefunction$$")
+    lines!(ax, tau, energies, label=L"$\psi(x)=1,\ N_w=1$")
+
+    lines!(ax, tau, mean(energies_jastrow), label=L"shortrange Jastrow $N_w=%$NWalkers$")
     band!(ax, tau, mean(energies_jastrow) - std(energies_jastrow), mean(energies_jastrow) + std(energies_jastrow), color=(:green, 0.2))
 
     hlines!(ax, E_critPoint_exact(lattice_size), color=:black, label=L"Exact$$", linestyle=:dash)

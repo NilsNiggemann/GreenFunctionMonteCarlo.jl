@@ -13,5 +13,5 @@ function strip_to_start(input::String)::String
     return start_index === nothing ? "" : input[last(start_index)+1:end]
 end
 
-Markdown.parse(strip_to_start(read("../../README.md", String)))
+Markdown.parse(remove_comments(strip_to_start(read("../../README.md", String))))
 ```
