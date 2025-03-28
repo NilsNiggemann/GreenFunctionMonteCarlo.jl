@@ -14,7 +14,6 @@ module GreenFunctionMonteCarlo
     import LinearAlgebra
     import LoopVectorization
     import ProgressMeter
-    import FFTW
 
     include("utils.jl")
     export createMMapArray, readMMapArray
@@ -75,5 +74,4 @@ module GreenFunctionMonteCarlo
     export ProgressBarLogger
 
     include("Observables/computeObservables.jl")
-    include("Observables/CorrelationFunction.jl")
 end # module
