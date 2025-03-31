@@ -57,7 +57,7 @@ periodic = false  # No periodic boundary conditions
 # Define the Hamiltonian
 (;Hilbert,H) = transverse_field_ising(lattice_size, h, J; periodic)
 ```
-The Hamiltonian is split into a diagonal and an offdiagonal part. The diagonal $H_{xx\prime}$ can be an arbitray function of the configuration $x$. The offdiagonal is given by the `moves` and `offdiagElements` arrays. The `moves` array contains the indices of the spins that are flipped, while the `offdiagElements` array contains the corresponding weights for each move.
+The Hamiltonian is split into a diagonal and an offdiagonal part. The diagonal $H_{xx}$ can be an arbitray function of the configuration $x$. The offdiagonal is given by the `moves` and `offdiagElements` arrays. The `moves` array contains the indices of the spins that are flipped, while the `offdiagElements` array contains the corresponding weights for each move.
 
 !!! note
     The `moves` can also be given by Integers, i.e. `Int8[0,0,...,-1,1,0,...,0]` for a term $\sigma_i^- \sigma_{i+1}^+$. This will be slower, but allows for more complex moves.
