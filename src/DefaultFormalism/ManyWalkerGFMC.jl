@@ -21,6 +21,13 @@ end
 
 getLocalEnergy(weights::AbstractVector) = -sum(weights)
 getLocalEnergy(x::AbstractConfig,weights::AbstractVector,Hxx::DiagonalOperator) = getLocalEnergy(weights) + Hxx(x)
+function getLocalEnergy(x::AbstractConfig,H::AbstractSignFreeOperator,logψ::AbstractGuidingFunction,Hilbert::AbstractHilbertSpace,Buffer = allocate_GWF_buffer(logψ,x))
+    weights = zeros(length(H.moves))
+    Hxx = get_diagonal(H)
+    get_markov_weights!(weights,x,H,logψ,Hilbert,Buffer)
+    return getLocalEnergy(x,weights,Hxx)
+end
+
 function getLocalEnergy(WE::AbstractWalkerEnsemble,α,Hxx::DiagonalOperator)
     Config = getConfig(WE,α)
     moveWeights = getMoveWeights(WE,α)
@@ -173,7 +180,11 @@ function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractProp
 end
 
 """
-    runGFMC!(prob::GFMCProblem, Observables::AbstractObserver, range; logger = NoLogger(), rng = Random.default_rng())
+    runGFMC!(prob::GFMCProblem, Observables::AbstractObserver, range; 
+             logger = default_logger(), rng = Random.default_rng(), 
+             reconfiguration = prob.reconfiguration, Propagator = prob.Propagator, 
+             logψ = prob.logψ, H = prob.H, Hilbert = prob.Hilbert, 
+             parallelization = prob.parallelization)
 
 Run the Green's Function Monte Carlo (GFMC) simulation for the given problem.
 
@@ -181,23 +192,42 @@ Run the Green's Function Monte Carlo (GFMC) simulation for the given problem.
 - `prob::GFMCProblem`: The GFMC problem instance containing the system configuration and parameters.
 - `Observables::AbstractObserver`: An observer object to track and record observables during the simulation.
 - `range`: Integer or range: The range of iterations or steps over which the simulation will be performed.
-- `logger`: (Optional) A logger instance for logging simulation progress. Defaults to `ProgressBarLogger(dt=0.1)`. Use `NoLogger()` or `nothing` to disable logging.
+
+# Keyword Arguments to override default values
+- `logger`: (Optional) A logger instance for logging simulation progress. Defaults to `default_logger()`. Use `NoLogger()` or `nothing` to disable logging.
 - `rng`: (Optional) A random number generator to ensure reproducibility. Defaults to `Random.default_rng()`.
+- `reconfiguration`: (Optional) The reconfiguration method to be used during the simulation. Defaults to `prob.reconfiguration`.
+- `Propagator`: (Optional) The propagator function for the simulation. Defaults to `prob.Propagator`.
+- `logψ`: (Optional) The logarithm of the wavefunction. Defaults to `prob.logψ`.
+- `H`: (Optional) The Hamiltonian operator. Defaults to `prob.H`.
+- `Hilbert`: (Optional) The Hilbert space of the system. Defaults to `prob.Hilbert`.
+- `parallelization`: (Optional) The parallelization strategy for the simulation. Defaults to `prob.parallelization`.
 
 # Returns
 This function modifies the `prob` and `Observables` in place to reflect the results of the simulation.
 
 # Notes
-Ensure that the `prob` and `Observables` are properly initialized before calling this function.
+- Ensure that the `prob` and `Observables` are properly initialized before calling this function.
+- If `range` is provided as an integer, it will be converted to a range `1:range`.
+- If `logger` is `nothing`, it will default to `NoLogger()`.
 """
-function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range; logger = default_logger(), rng = Random.default_rng())
+function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range; 
+    logger = default_logger(),
+    rng = Random.default_rng(),
+    reconfiguration = prob.reconfiguration,
+    Propagator = prob.Propagator,
+    logψ = prob.logψ,
+    H = prob.H,
+    Hilbert = prob.Hilbert,
+    parallelization = prob.parallelization)
+
     if range isa Integer
         range = 1:range
     end
     if isnothing(logger)
         logger = NoLogger()
     end
-    runGFMC!(prob.Walkers,Observables,prob.reconfiguration,range,prob.Propagator,prob.logψ,prob.H,prob.Hilbert,prob.parallelization,logger,rng)
+    runGFMC!(prob.Walkers,Observables,reconfiguration,range,Propagator,logψ,H,Hilbert,parallelization,logger,rng)
 end
 
 """
