@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Tutorial · GreenFunctionMonteCarlo.jl</title><meta name="title" content="Tutorial · GreenFunctionMonteCarlo.jl"/><meta property="og:title" content="Tutorial · GreenFunctionMonteCarlo.jl"/><meta property="twitter:title" content="Tutorial · GreenFunctionMonteCarlo.jl"/><meta name="description" content="Documentation for GreenFunctionMonteCarlo.jl."/><meta property="og:description" content="Documentation for GreenFunctionMonteCarlo.jl."/><meta property="twitter:description" content="Documentation for GreenFunctionMonteCarlo.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">GreenFunctionMonteCarlo.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Overview</a></li><li><a class="tocitem" href="../Contents/">Contents</a></li><li class="is-active"><a class="tocitem" href>Tutorial</a><ul class="internal"><li><a class="tocitem" href="#Defining-the-Hamiltonian"><span>Defining the Hamiltonian</span></a></li><li><a class="tocitem" href="#Running-the-Simulation"><span>Running the Simulation</span></a></li><li><a class="tocitem" href="#Evaluating-the-Results"><span>Evaluating the Results</span></a></li><li><a class="tocitem" href="#Using-Variational-Wavefunctions"><span>Using Variational Wavefunctions</span></a></li></ul></li><li><a class="tocitem" href="../Reference/">Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Tutorial</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Tutorial</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl/blob/master/docs/src/Example_transverseFieldIsing.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Example:-1D-Transverse-Field-Ising-Model"><a class="docs-heading-anchor" href="#Example:-1D-Transverse-Field-Ising-Model">Example: 1D Transverse Field Ising Model</a><a id="Example:-1D-Transverse-Field-Ising-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Example:-1D-Transverse-Field-Ising-Model" title="Permalink"></a></h1><h2 id="Defining-the-Hamiltonian"><a class="docs-heading-anchor" href="#Defining-the-Hamiltonian">Defining the Hamiltonian</a><a id="Defining-the-Hamiltonian-1"></a><a class="docs-heading-anchor-permalink" href="#Defining-the-Hamiltonian" title="Permalink"></a></h2><p>The transverse field Ising model is a quantum spin model that exhibits a quantum phase transition. The Hamiltonian for the model is given by:</p><p class="math-container">\[H = -J \sum_i^L \sigma_i^z \sigma_{i+1}^z - h \sum^L_i \sigma_i^x\]</p><p>where:</p><ul><li><span>$L$</span> is the number of spins.</li><li><span>$J$</span> is the interaction strength between neighboring spins.</li><li><span>$h$</span> is the transverse field strength.</li><li><span>$\sigma^z$</span> and <span>$\sigma^x$</span> are Pauli matrices.</li></ul><p>At the critical point <span>$h=1$</span>, the energy for open boundary conditions is given by:</p><p class="math-container">\[E_{crit} = 1 - \cosec \left(\frac{\pi}{2(2L+1)}\right)\]</p><p>Below is an example of how to simulate the transverse field Ising model using <code>GreenFunctionMonteCarlo.jl</code>:</p><p>First, we implement our Hamiltonian. Since our problem is equivalent to a hardcore boson problem, we represent our spin configurations by Booleans for optimal performance.</p><pre><code class="language-julia hljs">using GreenFunctionMonteCarlo
+
+σz(n::Bool) = (1 - 2 * n)
+σz(i, conf::AbstractArray) = σz(conf[i])
+
+function transverse_field_ising(Nsites, h, J; periodic = false)
+    Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
+
+    moves = [Bool[0 for _ in 1:Nsites] for _ in 1:Nsites]
+    offdiagElements = zeros(Float64, Nsites)
+
+    for i in eachindex(moves)
+        moves[i][i] = true
+        offdiagElements[i] = -h
+    end
+
+    function Hxx(conf)
+        E = -J * sum(σz(i, conf) * σz(i + 1, conf) for i in eachindex(conf)[1:end-1])
+        if periodic
+            E += -J * σz(Nsites, conf) * σz(1, conf)
+        end
+        return E
+    end
+
+    H = localOperator(moves, offdiagElements, DiagOperator(Hxx), Hilbert)
+    return (; Hilbert, H)
+end
+
+# Define parameters
+J = 1.0       # Interaction strength
+h = 1.0       # Transverse field strength
+lattice_size = 4  # Number of spins
+periodic = false  # No periodic boundary conditions
+# Define the Hamiltonian
+(;Hilbert,H) = transverse_field_ising(lattice_size, h, J; periodic)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(Hilbert = BosonHilbertSpace{HardCoreConstraint}(4, HardCoreConstraint()), H = LocalOperator{GreenFunctionMonteCarlo.FlipMove{StaticArraysCore.SVector{1, Int64}}, Float64, DiagOperator{Main.var&quot;#Hxx#5&quot;{Bool, Int64, Float64}}}(GreenFunctionMonteCarlo.FlipMove{StaticArraysCore.SVector{1, Int64}}[GreenFunctionMonteCarlo.FlipMove{StaticArraysCore.SVector{1, Int64}}([1]), GreenFunctionMonteCarlo.FlipMove{StaticArraysCore.SVector{1, Int64}}([2]), GreenFunctionMonteCarlo.FlipMove{StaticArraysCore.SVector{1, Int64}}([3]), GreenFunctionMonteCarlo.FlipMove{StaticArraysCore.SVector{1, Int64}}([4])], [-1.0, -1.0, -1.0, -1.0], DiagOperator{Main.var&quot;#Hxx#5&quot;{Bool, Int64, Float64}}(Main.var&quot;#Hxx#5&quot;{Bool, Int64, Float64}(false, 4, 1.0))))</code></pre><p>The Hamiltonian is split into a diagonal and an offdiagonal part. The diagonal <span>$H_{xx}$</span> can be an arbitray function of the configuration <span>$x$</span>. The offdiagonal is given by the <code>moves</code> and <code>offdiagElements</code> arrays. The <code>moves</code> array contains the indices of the spins that are flipped, while the <code>offdiagElements</code> array contains the corresponding weights for each move.</p><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>The <code>moves</code> can also be given by Integers, i.e. <code>Int8[0,0,...,-1,1,0,...,0]</code> for a term <span>$\sigma_i^- \sigma_{i+1}^+$</span>. This will be slower, but allows for more complex moves.</p></div></div><h2 id="Running-the-Simulation"><a class="docs-heading-anchor" href="#Running-the-Simulation">Running the Simulation</a><a id="Running-the-Simulation-1"></a><a class="docs-heading-anchor-permalink" href="#Running-the-Simulation" title="Permalink"></a></h2><p>We now proceed to solve the Hamiltonian. It is instructive to consider a single walker first. As a guiding wavefunction, we use the simplest one, an equal weight superposition of all configurations <span>$\psi(x) =1$</span>.</p><pre><code class="language-julia hljs">NSteps = 500  # Number of Monte Carlo steps
+NStepsEquil = 30  # Number of Monte Carlo steps for equilibration
+NWalkers = 1  # Number of walkers
+dtau = 0.1    # imaginary time propagation step
+
+startConfig = BosonConfig(Hilbert) # creates an initial configuration where all occupation numbers are 0
+
+problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ = EqualWeightSuperposition(), H, Hilbert)
+Observer = ConfigObserver(startConfig, NSteps, NWalkers) # Observer to measure the energy and configurations
+runGFMC!(problem, NoObserver(), NStepsEquil) #run for NStepsEquil steps without observing to equilibrate
+runGFMC!(problem, Observer, NSteps) #run for NSteps steps</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">GreenFunctionMonteCarlo.CombinedObserver{@NamedTuple{BasicObserver::BasicObserver{Float64}, ConfigurationObserver::ConfigurationObserver{Array{Bool, 3}}}}((BasicObserver = BasicObserver{Float64}([-2.9999999999999996, -2.9999999999999996, -2.9999999999999996, -5.0, -3.0, -2.9999999999999996, -5.0, -3.0000000000000004, -1.0, -3.0  …  -7.0, -7.0, -7.0, -7.0, -3.0, -2.9999999999999996, -2.9999999999999996, -2.9999999999999996, -2.9999999999999996, -2.9999999999999996], [1.3498588075760032, 1.3498588075760032, 1.3498588075760032, 1.5728574555139243, 1.5017332575293512, 1.3498588075760032, 1.5485794727193554, 1.5564177676399553, 1.1241423247185693, 1.2612615857073397  …  2.0137527074704766, 2.0137527074704766, 2.0137527074704766, 2.0137527074704766, 1.5732111756055203, 1.3498588075760032, 1.3498588075760032, 1.3498588075760032, 1.3498588075760032, 1.3498588075760032], [1 1 … 1 1]), ConfigurationObserver = ConfigurationObserver{Array{Bool, 3}}(Bool[1; 1; 0; 1;;; 1; 1; 0; 1;;; 1; 1; 0; 1;;; … ;;; 1; 1; 0; 1;;; 1; 1; 0; 1;;; 1; 1; 0; 1])))</code></pre><h2 id="Evaluating-the-Results"><a class="docs-heading-anchor" href="#Evaluating-the-Results">Evaluating the Results</a><a id="Evaluating-the-Results-1"></a><a class="docs-heading-anchor-permalink" href="#Evaluating-the-Results" title="Permalink"></a></h2><p>Let&#39;s see the results. For open boundary conditions at the critical point <span>$h=J$</span>, we may compare to the exact solution. </p><pre><code class="language-julia hljs">using CairoMakie, Statistics, Random
+Random.seed!(123) # for reproducibility
+function E_critPoint_exact(L, h=1, periodic=false)
+    (!periodic &amp;&amp; h==1) || return NaN
+
+    return 1 - csc(pi / (2 * (2 * L + 1)))
+end
+
+MaxProjection = 40
+energies = getEnergies(Observer, MaxProjection)
+tau = (0:MaxProjection-1) * dtau
+
+let
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel=L&quot;$τ$ (imaginary time)&quot;, ylabel=L&quot;Energy$$&quot;)
+
+    lines!(ax, tau, energies, label=L&quot;$\psi(x)=1$&quot;)
+
+    hlines!(ax, E_critPoint_exact(lattice_size,h,periodic), color=:black, label=L&quot;Exact$$&quot;, linestyle=:dash)
+
+    axislegend(ax, position=:rt)
+    fig
+end</code></pre><img src="f036b2df.png" alt="Example block output"/><p>Run the GFMC simulation a few times (with different seeds) and see what happens:</p><ul><li>At <span>$\tau=0$</span> (for a single walker!), we will always obtain the variational energy of the guiding wavefunction.</li><li>The energy initially decreases with the number of projections.</li><li>However, for larger <span>$\tau$</span>, the energy is strongly affected by statistical fluctuations. It may either increase or go below the exact energy.</li><li>We may quantify this statistical error by looking at the standard deviation of the energy upon performing several runs (see below).</li><li>Provided a large enough <span>$\tau$</span>, such that the imaginary time projection is converged, the energy will be within the statistical error of the exact energy.</li></ul><h2 id="Using-Variational-Wavefunctions"><a class="docs-heading-anchor" href="#Using-Variational-Wavefunctions">Using Variational Wavefunctions</a><a id="Using-Variational-Wavefunctions-1"></a><a class="docs-heading-anchor-permalink" href="#Using-Variational-Wavefunctions" title="Permalink"></a></h2><p>The issue of errorbars growing exponentially with <span>$\tau$</span> can be significantly alleviated by using more Walkers, i.e. setting <code>NWalkers = 10</code> in the example above, or by using a more sophisticated guiding wavefunction. For example, it is easy to implement a short ranged Jastrow wavefunction which correlates nearest neighbors spins.</p><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>You must always implement the logarithm of the wavefunction, i.e. <span>$\log \psi(x)$</span>.</p></div></div><pre><code class="language-julia hljs">function ShortRangeJastrow(x)
+    res = 0.
+    for i in eachindex(x)[1:end-1]
+        res += 0.5x[i]*x[i+1]
+    end
+    return res
+end
+logψ = NaiveFunction(ShortRangeJastrow)
+NWalkers = 10
+P = ProblemEnsemble([GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert) for i in 1:10])
+Observers_jastrow = [ConfigObserver(startConfig, NSteps, NWalkers) for _ in 1:10]
+
+runGFMC!(P, NoObserver(),200,logger=nothing) #equilibrate
+runGFMC!(P, Observers_jastrow,NSteps,logger=nothing)
+
+
+energies_jastrow = [getEnergies(Observer, MaxProjection) for Observer in Observers_jastrow]
+
+let
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel=L&quot;$τ$ (imaginary time)&quot;, ylabel=L&quot;Energy$$&quot;)
+
+    lines!(ax, tau, energies, label=L&quot;$\psi(x)=1,\ N_w=1$&quot;)
+
+    lines!(ax, tau, mean(energies_jastrow), label=L&quot;shortrange Jastrow $N_w=%$NWalkers$&quot;)
+    band!(ax, tau, mean(energies_jastrow) - std(energies_jastrow), mean(energies_jastrow) + std(energies_jastrow), color=(:green, 0.2))
+
+    hlines!(ax, E_critPoint_exact(lattice_size), color=:black, label=L&quot;Exact$$&quot;, linestyle=:dash)
+
+    axislegend(ax, position=:rt)
+    fig
+end</code></pre><img src="e459d7af.png" alt="Example block output"/><div class="admonition is-success"><header class="admonition-header">Tip</header><div class="admonition-body"><p>There is already an efficient implementation of the Jastrow function. Simply use it as:</p><pre><code class="nohighlight hljs">vij_jastrow = zeros(Float32,lattice_size,lattice_size)
+for i in axes(vij_jastrow, 1)[1:end-1]
+    vij_jastrow[i,i+1]=vij_jastrow[i+1,i] = 0.5
+end
+
+logψJastrow = Jastrow(
+    zeros(Float32,lattice_size),
+    vij_jastrow,
+)</code></pre><p>It is advised to use variational Monte Carlo to optimize a variational wavefunction before using it in GFMC. A particularly useful package is <a href="https://netket.readthedocs.io/en/stable/">Netket</a>, which may be called from Julia via <a href="https://github.com/JuliaPy/PyCall.jl">PyCall</a>.</p></div></div></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../Contents/">« Contents</a><a class="docs-footer-nextpage" href="../Reference/">Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.1 on <span class="colophon-date" title="Wednesday 2 April 2025 11:32">Wednesday 2 April 2025</span>. Using Julia version 1.10.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
