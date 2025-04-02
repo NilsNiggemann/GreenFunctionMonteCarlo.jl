@@ -26,6 +26,7 @@ GreenFunctionMonteCarlo.DiagOperator
 GreenFunctionMonteCarlo.DiagonalOperator
 GreenFunctionMonteCarlo.EqualWeightSuperposition
 GreenFunctionMonteCarlo.GFMCProblem
+GreenFunctionMonteCarlo.GreenFunctionMonteCarlo
 GreenFunctionMonteCarlo.HardCoreConstraint
 GreenFunctionMonteCarlo.InverseMove
 GreenFunctionMonteCarlo.Jastrow
