@@ -57,14 +57,15 @@ Pkg.add(url = "https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl.git")
 using GreenFunctionMonteCarlo, LinearAlgebra
 NSites = 3
 Nwalkers = 10
+NSteps = 10
 Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
 moves = Bool.(I(NSites)) # each move flips a single spin
 offdiagElements = -ones(NSites)
-H = localOperator(moves, offdiagElements, DiagOperator(x->0), Hilbert)
+H = localOperator(eachrow(moves), offdiagElements, DiagOperator(x->0), Hilbert)
 
-prob = GFMCProblem(BosonConfig(Hilbert), Nwalkers, ContinuousTimePropagator(0.1); logψ = EqualWeightSuperposition(), H, Hilbert)
-Observer = ConfigObserver(startConfig, NSteps, NWalkers) # Observer to measure the energy and configurations
-runGFMC!(problem, NoObserver(), NStepsEquil) #run for NStepsEquil steps without observing to equilibrate
+problem = GFMCProblem(BosonConfig(Hilbert), Nwalkers, ContinuousTimePropagator(0.1); logψ = EqualWeightSuperposition(), H, Hilbert)
+Observer = ConfigObserver(BosonConfig(Hilbert), NSteps, Nwalkers) # Observer to measure the energy and configurations
+runGFMC!(problem, NoObserver(), 100) #run for 100 steps without observing to equilibrate
 runGFMC!(problem, Observer, NSteps) #run for NSteps steps
 ```
 
