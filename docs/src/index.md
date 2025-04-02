@@ -9,6 +9,14 @@ Presently, this package treats only Hamiltonians that are free of the sign probl
 H_{x, x'} \leq 0 \quad \forall x \neq x'
 ```
 where $H_{x, x'}$ is the matrix element of the Hamiltonian between two configurations (spins or bosons) $x$ and $x'$. 
+## Installation
+
+To install the package, use the Julia package manager:
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl.git")
+```
 
 ## Quick usage example: 
 ```julia
