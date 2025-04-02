@@ -1,5 +1,4 @@
 using TestItemRunner, Test
-@run_package_tests
 
 @testitem "Bosonic Configuration Tests" begin
     include("utils.jl")
@@ -34,9 +33,25 @@ using TestItemRunner, Test
         rand!(RNG,config)
         @test fulfills_constraint(config, Hilbert)
     end
+
 end
 
+@testitem "AbstractConfigs" begin
+    include("utils.jl")
+    struct TestConfig{T} <: AbstractConfig{T,1}
+        data::Matrix{T}
+    end
+    Base.parent(x::TestConfig) = x.data
 
+    x = TestConfig(zeros(Int,10,2))
+    @test getindex(x,1) == 0
+    setindex!(x,1,1)
+    @test x[1] == 1
+    @test getindex(x,1,1) == 1
+
+    @test sum(x) == 1
+
+end
 @testitem "Sparse Move Tests" begin
     include("utils.jl")
     moves = [
@@ -125,8 +140,15 @@ end
         move = H.moves[1]
         @test move === GFMC.FlipMove(SC.SmallVector{2,Int}((2,3)))
 
-        GFMC.move_dx(H.moves[1],config) === SC.SmallVector{2,Bool}((1,1))
+        GFMC.move_dx_before(H.moves[1],config) === SC.SmallVector{2,Bool}((1,1))
         @test iszero(config)
+        
+        GFMC.apply!(config, move)
+        @test config == Bool[0,1,1]
+        GFMC.move_dx_after(H.moves[1],config) === SC.SmallVector{2,Bool}((1,1))
+
+        GFMC.apply_inverse!(config, move)
+        
 
     end
     @testset "Walker Ensemble Construction" begin
@@ -212,73 +234,5 @@ end
     end
 end
 
-##
-
-
-##
-@testitem "Jastrow Tests" begin
-    include("utils.jl")
-    
-    @testset for num_nonzero in (nothing,3)
-        RNG = StableRNG(1234)
-        NSites = 20
-        (Hilbert,H) = getExampleHardcore(NSites,4,RNG,num_nonzero)
-
-        config = BosonConfig(Hilbert)
-        
-        rand!(RNG,config)
-
-        logψ = Jastrow(config,Float64)
-
-        params = get_params(logψ)
-        rand!(RNG,params)
-        logψ.v_ij .= GFMC.LinearAlgebra.Symmetric(logψ.v_ij)
-
-        @testset "Wavefunction Ratio" begin
-            TestWFRatio(logψ,config,H,Hilbert)
-        end
-        
-        @testset "post_move" begin
-            Buff = GFMC.allocate_GWF_buffer(logψ,config)
-            move = H.moves[2]
-            xpr = copy(config)
-            apply!(xpr,move)
-            GFMC.post_move_affect!(Buff,xpr,move,logψ)
-
-            Buff2 = GFMC.allocate_GWF_buffer(logψ,xpr)
-
-            @test Buff.h_i ≈ Buff2.h_i atol = 1e-14
-        end
-        
-        
-        @testset "run Jastrow" begin
-            NWalkers = 20
-            NSteps = 10
-            CT = ContinuousTimePropagator(1.)
-
-            RNG = StableRNG(1234)
-            RNG_jastrow = StableRNG(1234)
-            
-            prob = GFMCProblem(config, NWalkers, CT; logψ=NaiveFunction(logψ), H, Hilbert,parallelization = GFMC.SingleThreaded())
-            prob_jastrow = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert,parallelization = GFMC.SingleThreaded())
-            
-            ConfSaver = ConfigObserver(config, NSteps,NWalkers)
-            ConfSaver_jastrow = ConfigObserver(config, NSteps,NWalkers)
-
-
-
-            runGFMC!(prob, ConfSaver, NSteps;rng = RNG,logger = nothing)
-            runGFMC!(prob_jastrow, ConfSaver_jastrow, NSteps;rng = RNG_jastrow,logger = nothing)
-
-            (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = GFMC.getObs(ConfSaver_jastrow)
-            testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)
-
-            Obs_reference = GFMC.getObs(ConfSaver)
-
-            @test Obs_reference.SaveConfigs == SaveConfigs
-            @test Obs_reference.TotalWeights ≈ TotalWeights atol = 1e-10
-            @test Obs_reference.energies ≈ energies atol = 1e-10
-            @test Obs_reference.reconfigurationTable == reconfigurationTable
-        end
-    end
-end
+include("Jastrow_tests.jl")
+@run_package_tests verbose=true

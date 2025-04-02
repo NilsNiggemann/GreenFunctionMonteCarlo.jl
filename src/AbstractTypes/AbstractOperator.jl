@@ -58,9 +58,14 @@ and implement the required functionality.
 - `apply!(x::AbstractConfig, move::AbstractMove)`: Apply the move to the configuration `x`.
 - `isapplicable(x::AbstractConfig, move::AbstractMove, HilbertSpace::AbstractHilbertSpace)`: Check if the move is applicable to the configuration `x` within the specified `HilbertSpace`.
 - `affected_sites(move::AbstractMove)`: Return the sites affected by the move.
-- `move_dx(move::AbstractMove,x::AbstractConfig)`: Return the values of the move applied to the configuration `x`. i.e. the change in x when the move is applied.
+It is further necessary to implement either of the three methods:
+- `move_dx(move::AbstractMove)` Return the values of the move applied to the configuration `x`. i.e. x′ - x.
+- `move_dx_before(move::AbstractMove,x::AbstractConfig`: Uses x to compute the move values before applying the move to the configuration. Defaults to `move_dx(move)`
+- `move_dx_after(move::AbstractMove,x::AbstractConfig)`: Uses x to compute the move values after applying the move to the configuration. Defaults to `move_dx(move)`
 """
 abstract type AbstractMove end
+@inline move_dx_before(move::AbstractMove,x::AbstractConfig) = move_dx(move)
+@inline move_dx_after(move::AbstractMove,x::AbstractConfig) = move_dx(move)
 
 """
     struct InverseMove{T<:AbstractMove} <: AbstractMove
