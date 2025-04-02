@@ -109,7 +109,7 @@ end
 
 function post_move_affect!(Buffer::SimpleJastrow_GWF_Buffer,Config::AbstractConfig,move::AbstractMove,logψ::Jastrow)
     sites = affected_sites(move)
-    dx = move_dx(move,Config)
+    dx = move_dx_after(move,Config)
 
     v = get_v_ij(logψ)
     h = Buffer.h_i
@@ -122,7 +122,7 @@ function post_move_affect!(Buffer::SimpleJastrow_GWF_Buffer,Config::AbstractConf
     end
     
     for (idx,i) in enumerate(sites)
-        s = -dx[idx]
+        s = dx[idx]
         
         LoopVectorization.@turbo for j in eachindex(h)
         # for j in eachindex(h)
@@ -151,8 +151,8 @@ end
     end
 end
 # default fallback, use move_dx which returns a Number type
-@inline function move_dx_jastrow(move::AbstractMove,x::AbstractConfig{Bool})
-    move_dx(move,x)
+@inline function move_dx_jastrow(move::AbstractMove,x::AbstractConfig)
+    move_dx_before(move,x)
 end
 
 const LV_COMPATIBLE_VECTOR = Union{Vector,SA.SVector}

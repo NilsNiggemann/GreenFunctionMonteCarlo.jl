@@ -1,17 +1,27 @@
 # GreenFunctionMonteCarlo
+## Overview
 
-```@contents
+`GreenFunctionMonteCarlo.jl` is a Julia package designed for performing Green Function Monte Carlo (GFMC) simulations on lattice models.
+
+Presently, this package treats only Hamiltonians that are free of the sign problem, i.e. whose elements satisfy
+```math
+
+H_{x, x'} \leq 0 \quad \forall x \neq x'
 ```
+where $H_{x, x'}$ is the matrix element of the Hamiltonian between two configurations (spins or bosons) $x$ and $x'$. 
 
-```@eval
-using Markdown
-function remove_comments(input::String)::String
-    s1 = replace(input, r"<!--.*?-->" => "")
-end
-function strip_to_start(input::String)::String
-    start_index = findfirst(r"<!-- START README \(DO NOT DELETE THIS LINE!\) -->", input)
-    return start_index === nothing ? "" : input[last(start_index)+1:end]
-end
+## Quick usage example: 
+```julia
+using GreenFunctionMonteCarlo, LinearAlgebra
+NSites = 3
+Nwalkers = 10
+Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
+moves = Bool.(I(NSites)) # each move flips a single spin
+offdiagElements = -ones(NSites)
+H = localOperator(moves, offdiagElements, DiagOperator(x->0), Hilbert)
 
-Markdown.parse(remove_comments(strip_to_start(read("../../README.md", String))))
+prob = GFMCProblem(BosonConfig(Hilbert), Nwalkers, ContinuousTimePropagator(0.1); logψ = EqualWeightSuperposition(), H, Hilbert)
+Observer = ConfigObserver(startConfig, NSteps, NWalkers) # Observer to measure the energy and configurations
+runGFMC!(problem, NoObserver(), NStepsEquil) #run for NStepsEquil steps without observing to equilibrate
+runGFMC!(problem, Observer, NSteps) #run for NSteps steps
 ```

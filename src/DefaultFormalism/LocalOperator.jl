@@ -52,7 +52,7 @@ struct SparseMove{T,V1<:AbstractVector{Int},V2<:AbstractVector{T}} <: AbstractMo
     vals::V2
 end
 @inline affected_sites(move::SparseMove) = move.inds
-@inline move_dx(move::SparseMove,x::AbstractConfig) = move.vals
+@inline move_dx(move::SparseMove) = move.vals
 
 @inline function apply!(x::AbstractConfig, move::SparseMove)
     for (i,dx) in zip(move.inds, move.vals)
@@ -71,11 +71,13 @@ struct FlipMove{Vec} <: AbstractMove
 end
 
 @inline affected_sites(move::FlipMove) = move.inds
-@inline function move_dx(move::FlipMove,x::AbstractConfig{Bool})
+
+@inline function move_dx_before(move::FlipMove,x::AbstractConfig{Bool})
     map(move.inds) do i
         !x[i] - x[i]
     end
 end
+@inline move_dx_after(move::FlipMove,x::AbstractConfig{Bool}) = -move_dx_before(move,x)
 
 @inline function apply!(x::AbstractConfig{Bool}, move::FlipMove)
     for i in move.inds
@@ -96,6 +98,15 @@ end
 
 isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::HardCoreConstraint) = true
 isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::OccupationNumberConstraint) = true
+
+function isapplicable(x::AbstractConfig{<:Integer}, move::SparseMove, c::OccupationNumberConstraint)
+    for (i,site) in enumerate(move.inds)
+        if !(c.min_occupation <= x[site] + move.vals[i] <= c.max_occupation)
+            return false
+        end
+    end
+    return true
+end
 
 _move_type(::LocalOperator{MoveType}) where {MoveType} = MoveType
 

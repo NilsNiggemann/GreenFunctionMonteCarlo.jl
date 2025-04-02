@@ -3,19 +3,30 @@ using Random, StableRNGs, TestItems, GreenFunctionMonteCarlo, Test
 import GreenFunctionMonteCarlo as GFMC
 import GreenFunctionMonteCarlo.SmallCollections as SC
 
-function getExampleHardcore(Nsites,NMoves,rng,num_nonzero=nothing)
-    Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
+get_move_type(::HardCoreConstraint) = Bool
+get_move_type(C::OccupationNumberConstraint) = Int8
 
-    getMove(num_nonzero::Nothing) = rand(rng,Bool,Nsites)
-    getMove(num_nonzero::Int) = SameLengthMove(Nsites,num_nonzero,rng)
-    H = localOperator(
-        [
-            getMove(num_nonzero) for i in 1:NMoves
-        ]
-    , -abs.(rand(NMoves)), ZeroDiagOperator(), Hilbert)
+function getExample(Nsites,NMoves,rng,num_nonzero=nothing,constraint = HardCoreConstraint())
+    Hilbert = BosonHilbertSpace(Nsites, constraint)
+
+    getMove(num_nonzero::Nothing) = rand(rng,get_move_type(constraint),Nsites)
+    getMove(num_nonzero::Int) = convert.(get_move_type(constraint,),SameLengthMove(Nsites,num_nonzero,rng))
+    getMoves(NMoves,::HardCoreConstraint) = [getMove(num_nonzero) for i in 1:NMoves]
+    function getMoves(NMoves,::OccupationNumberConstraint)
+        moves = [getMove(num_nonzero) for i in 1:NMoves]
+        append!(moves, -moves)
+        return moves
+    end
+    moves = getMoves(NMoves,constraint)
+    weights = -abs.(rand(NMoves))
+    if constraint isa OccupationNumberConstraint
+        append!(weights, copy(weights))
+    end
+    H = localOperator(getMoves(NMoves,constraint), weights, ZeroDiagOperator(), Hilbert)
     
     return (; Hilbert, H)
 end
+getExampleHardcore(Nsites,NMoves,rng,num_nonzero=nothing) = getExample(Nsites,NMoves,rng,num_nonzero,HardCoreConstraint())
 
 function SameLengthMove(Nsites, num_nonzero,rng=Random.default_rng())
     idxs = collect(1:Nsites)
@@ -31,7 +42,6 @@ function testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSi
     @testset "SaveConfigs" begin
 
         @test size(SaveConfigs) == (NSites,NWalkers,NSteps)
-        @test eltype(SaveConfigs) == Bool
         @test !iszero(SaveConfigs)
     end
     @testset "TotalWeights" begin
@@ -51,8 +61,6 @@ function testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSi
     end
 end
 
-
-
 function TestWFRatio(logψ,conf,H,Hilbert;tol=1e-10)
     Buff = GFMC.allocate_GWF_buffer(logψ,conf)
     psiname = GFMC.guidingfunc_name(logψ)
@@ -62,7 +70,6 @@ function TestWFRatio(logψ,conf,H,Hilbert;tol=1e-10)
         for m in H.moves
             GFMC.isapplicable(conf,m,Hilbert) || continue
             psidiff = GFMC.log_psi_diff(conf, m, logψ, Buff, Hilbert)
-            
             xpr = copy(conf)
             apply!(xpr,m)
             
@@ -70,4 +77,49 @@ function TestWFRatio(logψ,conf,H,Hilbert;tol=1e-10)
             
         end
     end
+end
+
+function testPostMove(logψ,config,H,Hilbert)
+    Buff = GFMC.allocate_GWF_buffer(logψ,config)
+
+    move = H.moves[begin]
+    for moveidx in eachindex(H.moves)
+        move = H.moves[moveidx]
+        GFMC.isapplicable(config,move,Hilbert) && break
+    end
+    xpr = copy(config)
+    apply!(xpr,move)
+    GFMC.post_move_affect!(Buff,xpr,move,logψ)
+
+    Buff2 = GFMC.allocate_GWF_buffer(logψ,xpr)
+    compareBuffers(Buff, Buff2)
+end
+
+compareBuffers(Buff::GFMC.SimpleJastrow_GWF_Buffer, Buff2::GFMC.SimpleJastrow_GWF_Buffer) = @test Buff.h_i ≈ Buff2.h_i  atol = 1e-14
+
+function testRun(config,logψ,H,Hilbert;NWalkers = 20,NSteps = 10)
+
+    CT = ContinuousTimePropagator(1.)
+
+    RNG = StableRNG(1234)
+    RNG_jastrow = StableRNG(1234)
+    
+    prob = GFMCProblem(config, NWalkers, CT; logψ=NaiveFunction(logψ), H, Hilbert,parallelization = GFMC.SingleThreaded())
+    prob_jastrow = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert,parallelization = GFMC.SingleThreaded())
+    
+    ConfSaver = ConfigObserver(config, NSteps,NWalkers)
+    ConfSaver_jastrow = ConfigObserver(config, NSteps,NWalkers)
+
+    runGFMC!(prob, ConfSaver, NSteps;rng = RNG,logger = nothing)
+    runGFMC!(prob_jastrow, ConfSaver_jastrow, NSteps;rng = RNG_jastrow,logger = nothing)
+
+    (;SaveConfigs,TotalWeights,energies,reconfigurationTable) = GFMC.getObs(ConfSaver_jastrow)
+    testSaveConf(SaveConfigs,TotalWeights,energies,reconfigurationTable,NSites,NWalkers,NSteps)
+
+    Obs_reference = GFMC.getObs(ConfSaver)
+
+    @test Obs_reference.SaveConfigs == SaveConfigs
+    @test Obs_reference.TotalWeights ≈ TotalWeights atol = 1e-10
+    @test Obs_reference.energies ≈ energies atol = 1e-10
+    @test Obs_reference.reconfigurationTable == reconfigurationTable
 end
