@@ -25,3 +25,16 @@ Observer = ConfigObserver(startConfig, NSteps, NWalkers) # Observer to measure t
 runGFMC!(problem, NoObserver(), NStepsEquil) #run for NStepsEquil steps without observing to equilibrate
 runGFMC!(problem, Observer, NSteps) #run for NSteps steps
 ```
+
+## Contributing
+
+Contributions are welcome! If you encounter any issues or have suggestions for improvements, please open an issue or submit a pull request on the [GitHub repository](https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl).
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl/blob/master/LICENSE) file for details.
+
+
+## References:
+- [1] [Buonaura, M. & Sorella, S. Green's function Monte Carlo method for lattice fermions. Phys. Rev. B 57, 11446 (1998).](https://doi.org/10.1103/PhysRevB.57.11446)
+- [2] [Becca, F. & Sorella, S. *Quantum Monte Carlo Approaches for Correlated Systems*. Cambridge University Press; 2017.](https://doi.org/10.1017/9781316417041)
