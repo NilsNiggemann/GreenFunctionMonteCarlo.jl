@@ -12,7 +12,7 @@ where $H_{x, x'}$ is the matrix element of the Hamiltonian between two configura
 
 ## Quick usage example: 
 ```julia
-using GreenFunctionMonteCarlo, LinearAlgebra
+using GreenFunctionMonteCarlo, LinearAlgebraö
 NSites = 3
 Nwalkers = 10
 Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())

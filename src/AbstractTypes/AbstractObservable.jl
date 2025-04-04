@@ -10,6 +10,9 @@ If no preallocated array is given, the observable defaults to using the buffer a
 """
 abstract type AbstractObservable end
 obs_size(O::AbstractObservable) = size(obs(O))
+
+function obs end
+
 (O::AbstractObservable)(Conf) = O(obs(O),Conf)
 Base.show(io::IO,::MIME"text/plain",O::Obs) where {Obs <: AbstractObservable} = print(io, "$Obs,", " ∈ ", obs_size(O))
 Base.display(io::IO,::MIME"text/plain",O::Obs) where {Obs <: AbstractObservable} = print(io, "$Obs,", " ∈ ", obs_size(O))

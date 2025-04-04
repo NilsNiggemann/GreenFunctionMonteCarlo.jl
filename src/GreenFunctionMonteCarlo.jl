@@ -45,7 +45,7 @@ module GreenFunctionMonteCarlo
 
     include("AbstractTypes/AbstractTypes.jl")
 
-    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator, AbstractLogger
+    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractObservable, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator, AbstractLogger
 
     export ZeroDiagOperator
 
@@ -99,4 +99,5 @@ module GreenFunctionMonteCarlo
     export ProgressBarLogger
 
     include("Observables/computeObservables.jl")
+    export getObs_diagonal
 end # module
