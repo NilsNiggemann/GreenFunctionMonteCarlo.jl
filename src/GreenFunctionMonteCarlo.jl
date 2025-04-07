@@ -98,6 +98,10 @@ module GreenFunctionMonteCarlo
     include("Loggers/ProgressBarLogger.jl")
     export ProgressBarLogger
 
+    include("Loggers/SilentLogger.jl")
+    include("Loggers/EnsembleLogger.jl")
+    # export EnsembleLogger_1
+
     include("Observables/computeObservables.jl")
     export getObs_diagonal
 end # module

@@ -252,17 +252,19 @@ struct ProblemEnsemble{P<:AbstractGFMCProblem} <: AbstractGFMCProblem
     problems::Vector{P}
 end
 
-function runGFMC!(P::ProblemEnsemble,Observers,args...;kwargs...)
+function runGFMC!(P::ProblemEnsemble,Observers,range,args...;logger = EnsembleLogger_2(),kwargs...)
     Threads.@threads for i in eachindex(P.problems,Observers)
         prob = P.problems[i]
         Observer = Observers[i]
-        runGFMC!(prob,Observer,args...;kwargs...)
+        write_log_ensemble(logger,i,range,P)
+        runGFMC!(prob,Observer,range,args...;logger=logger.obs_Loggers[i],kwargs...)
     end
     return Observers
 end
-
 function runGFMC!(P::ProblemEnsemble,Observer::NoObserver,args...;kwargs...)
     runGFMC!(P::ProblemEnsemble,[NoObserver() for _ in P.problems],args...;kwargs...)
 end
+runGFMC!(P::ProblemEnsemble,Observers::NoObserver,NSteps::Integer,args...;kwargs...) = runGFMC!(P,Observers,1:NSteps,args...;kwargs...)
+runGFMC!(P::ProblemEnsemble,Observers::AbstractVector,NSteps::Integer,args...;kwargs...) = runGFMC!(P,Observers,1:NSteps,args...;kwargs...)
 
 getConfigs(p::GFMCProblem) = RecursiveArrayTools.ArrayPartition(getConfigs(p.Walkers))
