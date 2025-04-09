@@ -22,7 +22,7 @@ end
 Jastrow(m_i::AbstractVector,v_ij::AbstractMatrix; buffer_reset_max=3_000) = Jastrow(m_i,_make_symmetric(v_ij),buffer_reset_max)
 Jastrow(conf::AbstractArray,args...;kwargs...) = Jastrow(length(conf),args...;kwargs...)
 
-_make_symmetric(v::AbstractMatrix) = copy(v) .= LinearAlgebra.Symmetric(v)
+_make_symmetric(v::AbstractMatrix) =  (v+v')/2
 
 function Jastrow(N::Int,Type = Float32; buffer_reset_max=3_000)
     m_i = zeros(Type,N)
