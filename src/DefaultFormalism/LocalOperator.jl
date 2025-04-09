@@ -43,9 +43,9 @@ end
 (O::DiagOperatorSum)(x::AbstractConfig) = sum(term(x) for term in O.terms)
 
 Base.:+(A::DiagonalOperator, B::DiagonalOperator) = DiagOperatorSum((A,B))
-Base.:+(A::DiagOperatorSum, B::DiagonalOperator) = DiagOperatorSum((A...,B))
-Base.:+(A::DiagonalOperator, B::DiagOperatorSum) = DiagOperatorSum((A,B...))
-Base.:+(A::DiagOperatorSum, B::DiagOperatorSum) = DiagOperatorSum((A...,B...))
+Base.:+(A::DiagOperatorSum, B::DiagonalOperator) = DiagOperatorSum((A.terms...,B))
+Base.:+(A::DiagonalOperator, B::DiagOperatorSum) = DiagOperatorSum((A,B.terms...))
+Base.:+(A::DiagOperatorSum, B::DiagOperatorSum) = DiagOperatorSum((A.terms...,B.terms...))
 
 struct SparseMove{T,V1<:AbstractVector{Int},V2<:AbstractVector{T}} <: AbstractMove
     inds::V1
