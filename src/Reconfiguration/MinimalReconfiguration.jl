@@ -74,3 +74,6 @@ function swapIndices!(list,i,j)
     list[i],list[j] = list[j],list[i]
     return list
 end
+
+struct NoReconfiguration <: AbstractReconfigurationScheme end
+reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,::NoReconfiguration,rng) = nothing
