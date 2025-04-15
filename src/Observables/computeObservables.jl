@@ -59,7 +59,9 @@ function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMat
             end
             pop == 0 && continue
             α´ = reconfigurationTable[α,n-i_m]
-
+            if α´ == 0
+                continue
+            end
             PopulationMatrixParent[α´,i_m+1] += pop
         end
     end
