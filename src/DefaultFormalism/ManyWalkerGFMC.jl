@@ -264,4 +264,4 @@ function runGFMC!(P::ProblemEnsemble,Observer::NoObserver,args...;kwargs...)
     runGFMC!(P::ProblemEnsemble,[NoObserver() for _ in P.problems],args...;kwargs...)
 end
 
-getConfigs(p::GFMCProblem) = RecursiveArrayTools.ArrayPartition(getConfigs(p.Walkers))
+getConfigs(p::GFMCProblem) = getConfigs(p.Walkers)
