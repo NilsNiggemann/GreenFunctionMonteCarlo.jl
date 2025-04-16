@@ -100,4 +100,6 @@ module GreenFunctionMonteCarlo
 
     include("Observables/computeObservables.jl")
     export getObs_diagonal
+
+    include("Optional/ParallelTempering/parallelTempering.jl")
 end # module
