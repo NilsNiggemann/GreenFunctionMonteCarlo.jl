@@ -16,7 +16,7 @@ using GreenFunctionMonteCarlo, LinearAlgebra
 NSites = 3
 Nwalkers = 10
 Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
-moves = Bool.(I(NSites)) # each move flips a single spin
+moves = eachcol(Bool.(I(NSites))) # each move flips a single spin
 offdiagElements = -ones(NSites)
 H = localOperator(moves, offdiagElements, DiagOperator(x->0), Hilbert)
 
