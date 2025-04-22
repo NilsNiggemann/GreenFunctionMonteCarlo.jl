@@ -234,5 +234,70 @@ end
     end
 end
 
+@testitem "BasicAccumulator TFI" begin
+    include("utils.jl")
+
+    function E_critPoint_exact(L)
+        return 1 - csc(pi / (2 * (2 * L + 1)))
+    end
+    σz(n::Bool) = (1 - 2 * n)
+    σz(i, conf::AbstractArray) = σz(conf[i])
+
+    using GreenFunctionMonteCarlo.LinearAlgebra
+    NSites = 2
+    NSteps = 1500
+    mProj = 20
+    NWalkers = 2
+
+    RNG = StableRNG(1234)
+
+    Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
+    moves = eachcol(Bool.(I(NSites))) # each move flips a single spin
+    offdiagElements = -ones(NSites)
+    Hxx = DiagOperator(x-> sum(σz(i, x) * σz(i + 1, x) for i in eachindex(x)[1:end-1]))
+
+    H = localOperator(moves, offdiagElements, Hxx, Hilbert)
+
+    config = BosonConfig(Hilbert)
+    rand!(RNG,config)
+    logψ = GFMC.EqualWeightSuperposition()
+    CT = ContinuousTimePropagator(0.1)
+    
+    prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+
+    outfile = tempname()
+
+    BasicAccumulatorFile = GFMC.BasicAccumulator(outfile, mProj, NWalkers)
+    BObs = GFMC.BasicObserver(outfile, NSteps, NWalkers)
+
+    Observer = GFMC.CombinedObserver((BObs, BasicAccumulatorFile))
+    runGFMC!(prob, NoObserver(), 200; rng = RNG)
+    runGFMC!(prob, Observer, NSteps; rng = RNG)
+
+    Energy = GFMC.getEnergies(BObs.TotalWeights, BObs.energies, mProj)
+    Energy_direct = BasicAccumulatorFile.en_numerator ./ BasicAccumulatorFile.en_denominator .*NSites
+
+    @testset "BasicAccumulator" begin
+
+        @test isfile(outfile)
+
+        GFMC.HDF5.h5open(outfile, "r") do file
+            @test haskey(file, "en_denominator")
+
+            en_denominator = read(file["en_denominator"])
+
+            @test haskey(file, "en_numerator")
+            en_numerator = read(file["en_numerator"])
+            @test !iszero(en_denominator)
+            @test !iszero(en_numerator)
+
+            @test Energy ≈ Energy_direct atol = 1e-10
+
+            @test Energy[end÷2] ≈ E_critPoint_exact(NSites) rtol = 2e-2
+        end
+    end
+end
+
+
 include("Jastrow_tests.jl")
 @run_package_tests verbose=true

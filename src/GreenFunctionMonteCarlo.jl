@@ -39,7 +39,7 @@ module GreenFunctionMonteCarlo
     import LinearAlgebra
     import LoopVectorization
     import ProgressMeter
-
+    import CircularArrays
     include("utils.jl")
     export createMMapArray, readMMapArray
 
@@ -100,4 +100,7 @@ module GreenFunctionMonteCarlo
 
     include("Observables/computeObservables.jl")
     export getObs_diagonal
+
+    include("Observers/BasicAccumulator.jl")
+    export BasicAccumulator
 end # module

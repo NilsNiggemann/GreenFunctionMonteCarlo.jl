@@ -45,7 +45,6 @@ function getObs_diagonal(Gnps,AllConfigs::AbstractArray{T,3},reconfigurationTabl
     
 end
 
-
 function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
     nMax = size(reconfigurationTable,2)
     PopulationMatrixParent = parent(PopulationMatrix)
