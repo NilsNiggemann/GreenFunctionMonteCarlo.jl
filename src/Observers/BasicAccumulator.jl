@@ -1,3 +1,13 @@
+"""
+    struct BasicAccumulator{T_high<:AbstractFloat} <: AbstractObserver
+
+A structure that represents a basic accumulator for observing
+energy and weights during simulations. Instead of storing observables at each step, the expectation values are computed on the fly, reducing the storage requirements significantly. Note that it is advisable to use a good guess of the average weight in the propagator to reduce numerical precision loss.
+
+# Type Parameters
+- `T_high`: The floating-point type used for observables, 
+  constrained to subtypes of `AbstractFloat`.
+"""
 struct BasicAccumulator{T_high<:AbstractFloat} <: AbstractObserver
     TotalWeights::CircularArrays.CircularVector{T_high, Vector{T_high}}
     energies::CircularArrays.CircularVector{T_high, Vector{T_high}}
