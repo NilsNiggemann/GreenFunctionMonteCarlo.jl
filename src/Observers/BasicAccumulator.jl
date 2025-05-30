@@ -15,7 +15,7 @@ struct BasicAccumulator{T_high<:AbstractFloat} <: AbstractObserver
     reconfigurationTable::CircularArrays.CircularMatrix{Int, Matrix{Int}}
     PopulationMatrix::CircularArrays.CircularMatrix{Int, Matrix{Int}}
     en_numerator::Vector{T_high}
-    en_denominator::Vector{T_high}
+    Gnp_denominator::Vector{T_high}
 end
 
 function BasicAccumulator(filename,m_proj::Integer,NWalkers::Integer)
@@ -28,9 +28,9 @@ function BasicAccumulator(filename,m_proj::Integer,NWalkers::Integer)
     Gnps = CircularArrays.CircularArray(zeros(Float64,p_proj,p_proj))
 
     en_numerator = maybe_MMap_array(filename,"en_numerator",Float64,(m_proj,))
-    en_denominator = maybe_MMap_array(filename,"en_denominator",Float64,(m_proj,))
+    Gnp_denominator = maybe_MMap_array(filename,"Gnp_denominator",Float64,(m_proj,))
 
-    return BasicAccumulator(TotalWeights,energies,Gnps,reconfigurationTable,PopulationMatrix,en_numerator,en_denominator)
+    return BasicAccumulator(TotalWeights,energies,Gnps,reconfigurationTable,PopulationMatrix,en_numerator,Gnp_denominator)
 end
 
 BasicAccumulator(m_proj::Integer,NWalkers::Integer) = BasicAccumulator(nothing,m_proj,NWalkers)
@@ -44,20 +44,20 @@ function saveObservables_before!(Observables::BasicAccumulator,i,Walkers::Abstra
 
     Gnps = Observables.Gnps
     en_numerator = Observables.en_numerator
-    en_denominator = Observables.en_denominator
+    Gnp_denominator = Observables.Gnp_denominator
 
     updateGnp!(Gnps,TotalWeights,i)
     NSites = length(getConfig(Walkers,1))
-    getEnergy_step!(en_numerator,en_denominator,Gnps,energies,i,NSites)
+    getEnergy_step!(en_numerator,Gnp_denominator,Gnps,energies,i,NSites)
     return nothing
 end
 
-function getEnergy_step!(en_numerator::AbstractVector,en_denominator::AbstractVector,Gnp::CircularArrays.CircularMatrix,localEnergies::AbstractVector,n::Integer,NSites::Integer)
+function getEnergy_step!(en_numerator::AbstractVector,Gnp_denominator::AbstractVector,Gnp::CircularArrays.CircularMatrix,localEnergies::AbstractVector,n::Integer,NSites::Integer)
     Nsites⁻¹ = 1/NSites
     for p in eachindex(en_numerator)
         n > p || continue
         en_numerator[p] += Gnp[n,p]*localEnergies[n]*Nsites⁻¹
-        en_denominator[p] += Gnp[n,p]
+        Gnp_denominator[p] += Gnp[n,p]
     end
     return en_numerator
 end

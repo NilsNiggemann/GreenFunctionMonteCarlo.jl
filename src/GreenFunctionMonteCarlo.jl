@@ -100,7 +100,12 @@ module GreenFunctionMonteCarlo
 
     include("Observables/computeObservables.jl")
     export getObs_diagonal
+    include("Observables/OccupationNumber.jl")
+    export OccupationNumber
 
     include("Observers/BasicAccumulator.jl")
     export BasicAccumulator
+    # include("Observers/ObservableAccumulator.jl")
+    include("Observers/ObservableAccumulator.jl")
+    # export ObservableAccumulator
 end # module

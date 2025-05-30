@@ -275,20 +275,20 @@ end
     runGFMC!(prob, Observer, NSteps; rng = RNG)
 
     Energy = GFMC.getEnergies(BObs.TotalWeights, BObs.energies, mProj)
-    Energy_direct = BasicAccumulatorFile.en_numerator ./ BasicAccumulatorFile.en_denominator .*NSites
+    Energy_direct = BasicAccumulatorFile.en_numerator ./ BasicAccumulatorFile.Gnp_denominator .*NSites
 
     @testset "BasicAccumulator" begin
 
         @test isfile(outfile)
 
         GFMC.HDF5.h5open(outfile, "r") do file
-            @test haskey(file, "en_denominator")
+            @test haskey(file, "Gnp_denominator")
 
-            en_denominator = read(file["en_denominator"])
+            Gnp_denominator = read(file["Gnp_denominator"])
 
             @test haskey(file, "en_numerator")
             en_numerator = read(file["en_numerator"])
-            @test !iszero(en_denominator)
+            @test !iszero(Gnp_denominator)
             @test !iszero(en_numerator)
 
             @test Energy ≈ Energy_direct atol = 1e-10
