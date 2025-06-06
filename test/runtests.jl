@@ -242,11 +242,6 @@ end
     end
     σz(n::Bool) = (1 - 2 * n)
     σz(i, conf::AbstractArray) = σz(conf[i])
-    # using Random
-    # struct DummyRNG <: AbstractRNG end
-    # Random.default_rng() = DummyRNG()
-    # Base.copy(rng::DummyRNG) = rng
-    # Base.copy!(::DummyRNG, rng::AbstractRNG) = nothing
 
     using GreenFunctionMonteCarlo.LinearAlgebra
     NSites = 2
@@ -270,17 +265,21 @@ end
     
     prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
 
+    # Estimate weights for the continuous time propagator
+
+    weight_normalization, w_avg_estimate = GFMC.estimate_weights_continuousTime!(prob;Nepochs=3,Nsamples=30,mProj = 20)
+    CT = ContinuousTimePropagator(0.1, w_avg_estimate)
+    
     outfile = tempname()
 
     BObs = GFMC.BasicObserver(outfile, NSteps, NWalkers)
     CObs = GFMC.ConfigurationObserver(outfile, config, NSteps, NWalkers)
     
-    BasicAccumulatorFile = GFMC.BasicAccumulator(outfile, mProj, NWalkers)
+    BasicAccumulatorFile = GFMC.BasicAccumulator(outfile, mProj, NWalkers; weight_normalization)
     ObsAccumulatorFile = GFMC.ObservableAccumulator(outfile,OccupationNumber(NSites),BasicAccumulatorFile, mProj, NWalkers, Threads.nthreads())
 
     Observer = GFMC.CombinedObserver((BObs, CObs,BasicAccumulatorFile, ObsAccumulatorFile))
 
-    runGFMC!(prob, NoObserver(), 200; rng = RNG)
     runGFMC!(prob, Observer, NSteps; rng = RNG)
 
     Energy = GFMC.getEnergies(BObs.TotalWeights, BObs.energies, mProj)

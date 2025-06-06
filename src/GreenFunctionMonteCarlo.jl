@@ -86,7 +86,6 @@ module GreenFunctionMonteCarlo
     include("Variational/NaiveFunction.jl")
     export NaiveFunction
 
-
     include("Loggers/LoggerUtils.jl")
 
     include("Loggers/NoLogger.jl")
@@ -100,12 +99,17 @@ module GreenFunctionMonteCarlo
 
     include("Observables/computeObservables.jl")
     export getObs_diagonal
+
     include("Observables/OccupationNumber.jl")
     export OccupationNumber
 
     include("Observers/BasicAccumulator.jl")
     export BasicAccumulator
-    # include("Observers/ObservableAccumulator.jl")
+
     include("Observers/ObservableAccumulator.jl")
-    # export ObservableAccumulator
+    export ObservableAccumulator
+
+    include("Observers/estimate_weights.jl")
+    export estimate_weights_continuousTime!
+
 end # module
