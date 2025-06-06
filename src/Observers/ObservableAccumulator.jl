@@ -22,7 +22,12 @@ struct ObservableAccumulator{ObsType<:AbstractObservable,T_high<:AbstractFloat,T
     Obs_numerator::Matrix{T_high}
     Obs_denominator::Vector{T_high}
 end
-
+function reset_accumulator!(Observables::ObservableAccumulator)
+    reset_accumulator!(Observables.BasicAcc)
+    set_zero!(Observables.Obs_numerator)
+    set_zero!(Observables.Obs_denominator)
+    return Observables
+end
 _type_stripped(::T) where T = nameof(T)
 
 """

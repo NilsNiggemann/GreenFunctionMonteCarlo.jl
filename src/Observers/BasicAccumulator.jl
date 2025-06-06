@@ -16,9 +16,26 @@ struct BasicAccumulator{T_high<:AbstractFloat} <: AbstractObserver
     PopulationMatrix::CircularArrays.CircularMatrix{Int, Matrix{Int}}
     en_numerator::Vector{T_high}
     Gnp_denominator::Vector{T_high}
+    weight_normalization::Array{T_high,0}
 end
 
-function BasicAccumulator(filename,m_proj::Integer,NWalkers::Integer)
+"""
+    BasicAccumulator(filename, m_proj::Integer, NWalkers::Integer; weight_normalization=1.)
+
+Create a `BasicAccumulator` object for accumulating observables in a Green Function Monte Carlo simulation.
+
+# Arguments
+- `filename`: The name of the file where accumulated data will be stored. Providing nothing will create an in-memory accumulator.
+- `m_proj::Integer`: The projection quantum number or similar parameter relevant to the simulation.
+- `NWalkers::Integer`: The number of walkers used in the Monte Carlo simulation.
+
+# Keyword Arguments
+- `weight_normalization`: (default = 1.0) A normalization factor applied to the weights of the walkers. Only used to improve floating point precision.
+
+# Returns
+A `BasicAccumulator` instance configured with the specified parameters.
+"""
+function BasicAccumulator(filename,m_proj::Integer,NWalkers::Integer;weight_normalization=1.)
     p_proj = 2m_proj
 
     energies = CircularArrays.CircularArray(zeros(p_proj))
@@ -29,11 +46,25 @@ function BasicAccumulator(filename,m_proj::Integer,NWalkers::Integer)
 
     en_numerator = maybe_MMap_array(filename,"en_numerator",Float64,(m_proj,))
     Gnp_denominator = maybe_MMap_array(filename,"Gnp_denominator",Float64,(m_proj,))
+    weight_normalization_arr = Array{Float64,0}(undef)
+    weight_normalization_arr .= weight_normalization
 
-    return BasicAccumulator(TotalWeights,energies,Gnps,reconfigurationTable,PopulationMatrix,en_numerator,Gnp_denominator)
+    return BasicAccumulator(TotalWeights,energies,Gnps,reconfigurationTable,PopulationMatrix,en_numerator,Gnp_denominator,weight_normalization_arr)
+end
+set_zero!(A::AbstractArray{T}) where T = fill!(A,zero(T))
+
+function reset_accumulator!(Observables::BasicAccumulator)
+    set_zero!(Observables.TotalWeights)
+    set_zero!(Observables.energies)
+    set_zero!(Observables.Gnps)
+    set_zero!(Observables.reconfigurationTable)
+    set_zero!(Observables.PopulationMatrix)
+    set_zero!(Observables.en_numerator)
+    set_zero!(Observables.Gnp_denominator)
+    return Observables
 end
 
-BasicAccumulator(m_proj::Integer,NWalkers::Integer) = BasicAccumulator(nothing,m_proj,NWalkers)
+BasicAccumulator(m_proj::Integer,NWalkers::Integer;kwargs...) = BasicAccumulator(nothing,m_proj,NWalkers;kwargs...)
 
 function saveObservables_before!(Observables::BasicAccumulator,i,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
     Hxx = get_diagonal(H)
@@ -41,6 +72,7 @@ function saveObservables_before!(Observables::BasicAccumulator,i,Walkers::Abstra
     TotalWeights = Observables.TotalWeights
 
     update_energies_TotalWeights!(energies,TotalWeights,i,Walkers,Hxx)
+    TotalWeights[i] /= Observables.weight_normalization[]
 
     Gnps = Observables.Gnps
     en_numerator = Observables.en_numerator
