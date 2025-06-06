@@ -23,10 +23,10 @@ struct ObservableAccumulator{ObsType<:AbstractObservable,T_high<:AbstractFloat,T
     Obs_denominator::Vector{T_high}
 end
 
-_strip_params(::T) where T = getproperty(parentmodule(T), nameof(T))
+_type_stripped(::T) where T = nameof(T)
 
 """
-    ObservableAccumulator(filename, Observable::AbstractObservable, BasicAcc::BasicAccumulator, m_proj::Integer, NWalkers::Integer, NThreads::Integer; Obs_Name = _strip_params(Observable))
+    ObservableAccumulator(filename, Observable::AbstractObservable, BasicAcc::BasicAccumulator, m_proj::Integer, NWalkers::Integer, NThreads::Integer; Obs_Name = _type_stripped(Observable))
 
 Constructs an `ObservableAccumulator` for accumulating measurements of a given observable during a Monte Carlo simulation.
 
@@ -37,12 +37,12 @@ Constructs an `ObservableAccumulator` for accumulating measurements of a given o
 - `m_proj::Integer`: The projection quantum number or index relevant to the observable.
 - `NWalkers::Integer`: The number of walkers used in the simulation.
 - `NThreads::Integer`: The number of threads to be used for parallel accumulation.
-- `Obs_Name`: (optional) The name of the observable, defaults to the result of `_strip_params(Observable)`.
+- `Obs_Name`: (optional) The name of the observable, defaults to the name of the Observable struct.
 
 # Returns
 An `ObservableAccumulator` object configured for the specified observable and simulation parameters.
 """
-function ObservableAccumulator(filename,Observable::AbstractObservable,BasicAcc::BasicAccumulator,m_proj::Integer,NWalkers::Integer,NThreads::Integer; Obs_Name = _strip_params(Observable))
+function ObservableAccumulator(filename,Observable::AbstractObservable,BasicAcc::BasicAccumulator,m_proj::Integer,NWalkers::Integer,NThreads::Integer; Obs_Name = _type_stripped(Observable))
     p_proj = 2m_proj
     Obs_out = obs(Observable)
     NumObs = length(Obs_out)

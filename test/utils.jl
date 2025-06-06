@@ -1,5 +1,6 @@
 
 using Random, StableRNGs, TestItems, GreenFunctionMonteCarlo, Test
+using GreenFunctionMonteCarlo
 import GreenFunctionMonteCarlo as GFMC
 import GreenFunctionMonteCarlo.SmallCollections as SC
 
@@ -18,7 +19,7 @@ function getExample(Nsites,NMoves,rng,num_nonzero=nothing,constraint = HardCoreC
         return moves
     end
     moves = getMoves(NMoves,constraint)
-    weights = -abs.(rand(NMoves))
+    weights = -abs.(rand(rng,NMoves))
     if constraint isa OccupationNumberConstraint
         append!(weights, copy(weights))
     end
