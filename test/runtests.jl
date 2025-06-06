@@ -234,7 +234,7 @@ end
     end
 end
 
-@testitem "BasicAccumulator TFI" begin
+@testitem "Accumulator TFI" begin
     include("utils.jl")
 
     function E_critPoint_exact(L)
@@ -267,10 +267,14 @@ end
 
     outfile = tempname()
 
-    BasicAccumulatorFile = GFMC.BasicAccumulator(outfile, mProj, NWalkers)
     BObs = GFMC.BasicObserver(outfile, NSteps, NWalkers)
+    CObs = GFMC.ConfigurationObserver(outfile, config, NSteps, NWalkers)
+    
+    BasicAccumulatorFile = GFMC.BasicAccumulator(outfile, mProj, NWalkers)
+    ObsAccumulatorFile = GFMC.ObservableAccumulator(outfile,OccupationNumber(NSites),BasicAccumulatorFile, mProj, NWalkers, Threads.nthreads())
 
-    Observer = GFMC.CombinedObserver((BObs, BasicAccumulatorFile))
+    Observer = GFMC.CombinedObserver((BObs, CObs,BasicAccumulatorFile, ObsAccumulatorFile))
+
     runGFMC!(prob, NoObserver(), 200; rng = RNG)
     runGFMC!(prob, Observer, NSteps; rng = RNG)
 
@@ -294,6 +298,33 @@ end
             @test Energy ≈ Energy_direct atol = 1e-10
 
             @test Energy[end÷2] ≈ E_critPoint_exact(NSites) rtol = 2e-2
+        end
+    end
+
+    Gnps = GFMC.precomputeNormalizedAccWeight(BObs.TotalWeights,2mProj)
+
+    n_avg = stack(getObs_diagonal(Gnps,CObs.SaveConfigs,BObs.reconfigurationTable,OccupationNumber(NSites),1:mProj))
+
+    n_avg_direct = ObsAccumulatorFile.Obs_numerator ./ ObsAccumulatorFile.Obs_denominator'
+
+    direct_mean = dropdims(mean( CObs.SaveConfigs,dims = (2,3)),dims=(2,3))
+
+    @testset "ObservableAccumulator" begin
+
+        @test isfile(outfile)
+
+        GFMC.HDF5.h5open(outfile, "r") do file
+            @test haskey(file, "OccupationNumber_denominator")
+
+            OccupationNumber_denominator = read(file["OccupationNumber_denominator"])
+
+            @test haskey(file, "OccupationNumber_numerator")
+            OccupationNumber_numerator = read(file["OccupationNumber_numerator"])
+            @test !iszero(OccupationNumber_denominator)
+            @test !iszero(OccupationNumber_numerator)
+
+            @test n_avg_direct[:,1] ≈ 2direct_mean atol = 1e-13
+            @test n_avg ≈ n_avg_direct atol = 1e-10
         end
     end
 end

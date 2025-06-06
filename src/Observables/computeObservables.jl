@@ -19,10 +19,9 @@ function getObs_diagonal(Gnps,AllConfigs::AbstractArray{T,3},reconfigurationTabl
 
     _fill_obs_buffer!(ObsBuffer,1:m_max,ObsFunc,AllConfigs,m_max)
 
-    for n in 2:N
+    for n in 1:N
         getPopulationMatrix!(PopulationMatrix,reconfigurationTable,n,m_max-1)
-        _fill_obs_buffer!(ObsBuffer,n-1,ObsFunc,AllConfigs,m_max)
-
+        _fill_obs_buffer!(ObsBuffer,n,ObsFunc,AllConfigs,m_max)
         for m_index in eachindex(m_values)
             m = m_values[m_index]
             Gnp = Gnps[n,1+2m]
