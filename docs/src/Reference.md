@@ -15,6 +15,7 @@ GreenFunctionMonteCarlo.AbstractPropagator
 GreenFunctionMonteCarlo.AbstractReconfigurationScheme
 GreenFunctionMonteCarlo.AbstractSignFreeOperator
 GreenFunctionMonteCarlo.AbstractWalkerEnsemble
+GreenFunctionMonteCarlo.BasicAccumulator
 GreenFunctionMonteCarlo.BasicObserver
 GreenFunctionMonteCarlo.BosonConfig
 GreenFunctionMonteCarlo.BosonHilbertSpace
@@ -33,6 +34,7 @@ GreenFunctionMonteCarlo.Jastrow
 GreenFunctionMonteCarlo.NaiveFunction
 GreenFunctionMonteCarlo.NoLogger
 GreenFunctionMonteCarlo.NoObserver
+GreenFunctionMonteCarlo.ObservableAccumulator
 GreenFunctionMonteCarlo.OneBodyDiagOperator
 GreenFunctionMonteCarlo.ProblemEnsemble
 GreenFunctionMonteCarlo.ProgressBarLogger
@@ -42,6 +44,7 @@ GreenFunctionMonteCarlo.ZeroDiagOperator
 GreenFunctionMonteCarlo.allocate_GWF_buffers
 GreenFunctionMonteCarlo.apply!
 GreenFunctionMonteCarlo.continuos_time_propagation!
+GreenFunctionMonteCarlo.estimate_weights_continuousTime!
 GreenFunctionMonteCarlo.fulfills_constraint
 GreenFunctionMonteCarlo.getEnergies
 GreenFunctionMonteCarlo.get_move

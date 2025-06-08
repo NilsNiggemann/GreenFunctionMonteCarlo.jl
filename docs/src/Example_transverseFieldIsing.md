@@ -133,7 +133,6 @@ Observers_jastrow = [ConfigObserver(startConfig, NSteps, NWalkers) for _ in 1:10
 runGFMC!(P, NoObserver(),200,logger=nothing) #equilibrate
 runGFMC!(P, Observers_jastrow,NSteps,logger=nothing)
 
-
 energies_jastrow = [getEnergies(Observer, MaxProjection) for Observer in Observers_jastrow]
 
 let
@@ -165,3 +164,77 @@ end
     )
     ```
     It is advised to use variational Monte Carlo to optimize a variational wavefunction before using it in GFMC. A particularly useful package is [Netket](https://netket.readthedocs.io/en/stable/), which may be called from Julia via [PyCall](https://github.com/JuliaPy/PyCall.jl).
+
+
+## Observables diagonal in the computational basis
+Observables which are diagonal in the computational basis (i.e. they can be expressed as a function of the occupation numbers) are simple to determine. Using the `ConfigObserver`, which records the configuration of the walkers at each step, we can compute them cheaply after the simulation. 
+To do this, we only need to use the function `getObs_diagonal`. Let's consider the average occupation number as an example.
+```@example TFI
+mProj = 40  # Number of projection steps
+Observable = OccupationNumber(lattice_size)
+
+n_avg = [stack(getObs_diagonal(O,Observable,1:mProj)) for O in Observers_jastrow]
+
+n_avg_mean = mean(n_avg)
+n_avg_std = std(n_avg)
+
+let 
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel=L"$τ$ (imaginary time)", ylabel=L"$\langle S^z_i\rangle$")
+    tau =( 0:mProj-1) * dtau
+    for i in 1:lattice_size
+        lines!(ax, tau, n_avg_mean[i,:])
+        band!(ax, tau, n_avg_mean[i,:] - n_avg_std[i,:], n_avg_mean[i,:] + n_avg_std[i,:], alpha = 0.5)
+    end
+    fig
+end
+```
+
+Here, `OccupationNumber` is a pre-defined observable. However, it is relatively simple to implement your own observables by defining a new subtype of `AbstractObservable`. As an example lets try to compute $\langle S^z_i S^z_j \rangle$ in a simple way.
+
+```@example TFI
+struct SpinCorrelations{T<:Real} <: AbstractObservable
+    ObservableBuffer::Matrix{T}
+end
+SpinCorrelations(Nsites) = SpinCorrelations(zeros(Nsites,Nsites))
+
+Base.copy(O::SpinCorrelations) = SpinCorrelations(copy(O.ObservableBuffer))
+GreenFunctionMonteCarlo.obs(O::SpinCorrelations) = O.ObservableBuffer
+function (O::SpinCorrelations)(out,config)
+    for i in axes(out,1)
+        for j in axes(out,2)
+            out[i,j] = σz(i,config) * σz(j,config)
+        end
+    end
+    return out
+end
+```
+Key here is the function `(O::My_new_OccupationNumber)(out,config)`. Given a configuration `config`, it computes the estimate observable and stores it in a pre-allocated buffer `out`. 
+Also note the defintion of `GreenFunctionMonteCarlo.obs(O::My_new_OccupationNumber)`, which returns the buffer that is used to store the observable. 
+Now we can use this observable in the same way as the `OccupationNumber` above:
+```@example TFI
+Observable = SpinCorrelations(lattice_size)
+Corrs = [stack(getObs_diagonal(O,Observable,1:mProj)) for O in Observers_jastrow]
+
+Corr_mean = mean(Corrs)
+Corr_std = std(Corrs)
+
+let 
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel=L"$τ$ (imaginary time)", ylabel=L"$\langle S^z_i\rangle$")
+    tau =( 0:mProj-1) * dtau
+    
+    i = 2
+    for j in 1:lattice_size
+        lines!(ax, tau, Corr_mean[i,j,:])
+        band!(ax, tau, Corr_mean[i,j,:] - Corr_std[i,j,:], Corr_mean[i,j,:] + Corr_std[i,j,:], alpha = 0.5)
+    end
+    fig
+end
+```
+
+Note that we left quite some room to improve performance here. For instance, we do not actually have to compute the full matrix of correlations, but only the upper triangle. 
+
+!!! tip
+    While the approach above is very convenient, for big simulations, it may not be feasible to store all configurations as the output file may become too large. For this case, it is also possible to use accumulators, such as [`BasicAccumulator`](@ref) and [`ObservableAccumulator`](@ref). Accumulators compute the imaginary time projection of the observable at every step of the simulation, thereby saving a lot of storage. `BasicAccumulator` contains all the essential information to allow for projection during the run, while `ObservableAccumulator` may be used to compute observables. 
+    To combine several accumulators, you can use `CombinedObserver`. 

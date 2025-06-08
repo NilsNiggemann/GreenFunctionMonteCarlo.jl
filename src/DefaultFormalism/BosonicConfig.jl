@@ -31,10 +31,10 @@ This type is a subtype of `AbstractConfig{T, N}`, which provides a common interf
 struct BosonConfig{T,N,Arr<:AbstractArray{T,N}} <: AbstractConfig{T,N}
     data::Arr
 end
+BosonConfig(x::BosonConfig) = x
 Base.parent(x::BosonConfig) = x.data
 Base.copy(x::BosonConfig) = BosonConfig(copy(x.data))
 Base.size(H::BosonHilbertSpace) = (H.num_sites,)
-
 """
     HardCoreConstraint <: AbstractConstraint
 

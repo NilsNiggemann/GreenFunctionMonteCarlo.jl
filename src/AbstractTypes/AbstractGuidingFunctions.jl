@@ -74,13 +74,12 @@ end
 
 compute_GWF_buffer!(Buffer::AbstractGuidingFunctionBuffer,logψ::AbstractGuidingFunction,x) = Buffer
 
-function compute_GWF_buffers!(Walkers::AbstractWalkerEnsemble,logψ::AbstractGuidingFunction,x)
-    Buffers = getBuffers(Walkers)
-    X = getConfigs(Walkers)
-    Threads.@threads for i in eachindex(Buffers,X)
-        compute_GWF_buffer!(Buffers[i],logψ,X[i])
+function compute_GWF_buffers!(Walkers::AbstractWalkerEnsemble,logψ::AbstractGuidingFunction)
+    Threads.@threads for α in eachindex(Walkers)
+        Buffer = getBuffer(Walkers,α)
+        x = getConfig(Walkers,α)
+        compute_GWF_buffer!(Buffer,logψ,x)
     end
-    return Buffers
 end
 
 """

@@ -17,7 +17,7 @@ NSites = 3
 Nwalkers = 10
 NSteps = 10
 Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
-moves = Bool.(I(NSites)) # each move flips a single spin
+moves = eachcol(Bool.(I(NSites))) # each move flips a single spin
 offdiagElements = -ones(NSites)
 H = localOperator(eachrow(moves), offdiagElements, DiagOperator(x->0), Hilbert)
 
@@ -40,13 +40,13 @@ module GreenFunctionMonteCarlo
     import LinearAlgebra
     import LoopVectorization
     import ProgressMeter
-
+    import CircularArrays
     include("utils.jl")
     export createMMapArray, readMMapArray
 
     include("AbstractTypes/AbstractTypes.jl")
 
-    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator, AbstractLogger
+    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractObservable, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator, AbstractLogger
 
     export ZeroDiagOperator
 
@@ -87,7 +87,6 @@ module GreenFunctionMonteCarlo
     include("Variational/NaiveFunction.jl")
     export NaiveFunction
 
-
     include("Loggers/LoggerUtils.jl")
 
     include("Loggers/NoLogger.jl")
@@ -100,4 +99,18 @@ module GreenFunctionMonteCarlo
     export ProgressBarLogger
 
     include("Observables/computeObservables.jl")
+    export getObs_diagonal
+
+    include("Observables/OccupationNumber.jl")
+    export OccupationNumber
+
+    include("Observers/BasicAccumulator.jl")
+    export BasicAccumulator
+
+    include("Observers/ObservableAccumulator.jl")
+    export ObservableAccumulator
+
+    include("Observers/estimate_weights.jl")
+    export estimate_weights_continuousTime!
+
 end # module

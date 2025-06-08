@@ -20,7 +20,7 @@ Pkg.add(url = "https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl.git")
 
 ## Quick usage example: 
 ```julia
-using GreenFunctionMonteCarlo, LinearAlgebra
+using GreenFunctionMonteCarlo, LinearAlgebraö
 NSites = 3
 Nwalkers = 10
 NSteps = 10
