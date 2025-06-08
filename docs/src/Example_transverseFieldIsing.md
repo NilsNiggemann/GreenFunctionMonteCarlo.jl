@@ -7,7 +7,7 @@ H = -J \sum_i^L \sigma_i^z \sigma_{i+1}^z - h \sum^L_i \sigma_i^x
 ```
 
 where:
-- $L$ is the number of spins.
+-  $L$ is the number of spins.
 -  $J$ is the interaction strength between neighboring spins.
 -  $h$ is the transverse field strength.
 -  $\sigma^z$ and $\sigma^x$ are Pauli matrices.
@@ -15,8 +15,6 @@ At the critical point $h=1$, the energy for open boundary conditions is given by
 ```math
 E_{crit} = 1 - \cosec \left(\frac{\pi}{2(2L+1)}\right)
 ```
-where $L$ is the number of spins.
-
 Below is an example of how to simulate the transverse field Ising model using `GreenFunctionMonteCarlo.jl`:
 
 First, we implement our Hamiltonian. Since our problem is equivalent to a hardcore boson problem, we represent our spin configurations by Booleans for optimal performance.
@@ -92,7 +90,7 @@ end
 
 MaxProjection = 40
 energies = getEnergies(Observer, MaxProjection) 
-tau = 0:MaxProjection-1 * dtau
+tau = (0:MaxProjection-1) * dtau
 
 let 
     fig = Figure()

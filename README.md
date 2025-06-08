@@ -45,7 +45,6 @@ where $H_{x, x'}$ is the matrix element of the Hamiltonian between two configura
 ## Limitations
 - The package is currently in the experimental stage and exported functionality may change or break in the future.
 - Currently, there is no implementation of the fixed-node approximation [\[2\]](#references) for Hamiltonians with the sign problem.
-
 ## Installation
 
 To install the package, use the Julia package manager:
@@ -53,6 +52,23 @@ To install the package, use the Julia package manager:
 ```julia
 using Pkg
 Pkg.add(url = "https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl.git")
+```
+
+## Quick usage example: 
+```julia
+using GreenFunctionMonteCarlo, LinearAlgebra
+NSites = 3
+Nwalkers = 10
+NSteps = 10
+Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
+moves = Bool.(I(NSites)) # each move flips a single spin
+offdiagElements = -ones(NSites)
+H = localOperator(eachrow(moves), offdiagElements, DiagOperator(x->0), Hilbert)
+
+problem = GFMCProblem(BosonConfig(Hilbert), Nwalkers, ContinuousTimePropagator(0.1); logψ = EqualWeightSuperposition(), H, Hilbert)
+Observer = ConfigObserver(BosonConfig(Hilbert), NSteps, Nwalkers) # Observer to measure the energy and configurations
+runGFMC!(problem, NoObserver(), 100) #run for 100 steps without observing to equilibrate
+runGFMC!(problem, Observer, NSteps) #run for NSteps steps
 ```
 
 ## Documentation
