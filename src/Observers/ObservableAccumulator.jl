@@ -62,7 +62,7 @@ function ObservableAccumulator(filename,Observable::AbstractObservable,BasicAcc:
     return ObsAcc
 end
 
-ObservableAccumulator(Observable::AbstractObservable,m_proj::Integer,NWalkers::Integer,NThreads::Integer) = ObservableAccumulator(nothing,Observable::AbstractObservable,m_proj::Integer,NWalkers::Integer,NThreads::Integer)
+ObservableAccumulator(Observable::AbstractObservable,BasicAcc::BasicAccumulator,m_proj::Integer,NWalkers::Integer,NThreads::Integer) = ObservableAccumulator(nothing,Observable::AbstractObservable,BasicAcc,m_proj::Integer,NWalkers::Integer,NThreads::Integer)
 
 function saveObservables_before!(Observables::ObservableAccumulator,i,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
     # saveObservables_before!(Observables.BasicAcc,i,Walkers,H,reconfiguration)
