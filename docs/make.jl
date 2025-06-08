@@ -8,7 +8,7 @@ makedocs(
     authors = "Nils Niggemann",
     sitename = "GreenFunctionMonteCarlo.jl",
 
-    pages = ["Overview" => "index.md","Contents" => "Contents.md","Tutorial" => "Example_transverseFieldIsing.md","Reference.md"],
+    pages = ["Overview" => "index.md","Contents" => "Contents.md","Tutorial" => "Example_transverseFieldIsing.md", "Reference.md"],
     # strict = true,
     # clean = true,
     # checkdocs = :exports,
