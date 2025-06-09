@@ -133,22 +133,27 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
 
     getPopulationMatrix!(PopulationMatrix,reconfigurationTable,n,m_max)
     Nw = length(eachindex(Walkers))
-    
+    Obs_Buffers_arr = parent(Obs_Buffers)
+
     Nw⁻¹ = 1/Nw
     m_values = 0:m_max
     Threads.@threads for m_index in eachindex(m_values)
         m = m_values[m_index]
         Gnp = Gnps[n,1+2m]
+        Gnp == 0 && continue
         # @info "" n m Gnp
         Obs_denominator[m_index] += Gnp
         # Obs_denominator[m_index] += Gnp*Nw
-        @views for α in 1:Nw
+        for α in 1:Nw
 
             mult = PopulationMatrix[α,m_index]
             mult == 0 && continue
-            mult *= Nw⁻¹
-            O = Obs_Buffers[:,α,n-m]
-            @. Obs_numerator[:,m_index] += O*Gnp*mult
+            mult *= Nw⁻¹*Gnp
+            n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
+            # O = @view Obs_Buffers_arr[:,α,n_m_wrapped]
+            LoopVectorization.@turbo for i in axes(Obs_numerator,1)
+                Obs_numerator[i,m_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
+            end
         end
     end
 end
