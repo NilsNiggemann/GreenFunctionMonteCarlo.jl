@@ -5,6 +5,9 @@ Saves the configurations of the walkers during the Monte Carlo simulation.
 
 # Type Parameters
 - `T`: Data type for the configurations.
+
+# See Also
+- [`ObservableAccumulator`](@ref)
 """
 struct ConfigurationObserver{T} <: AbstractObserver
     SaveConfigs::T

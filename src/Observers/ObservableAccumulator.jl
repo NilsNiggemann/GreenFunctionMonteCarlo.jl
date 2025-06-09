@@ -1,5 +1,3 @@
-test() = println("Runni.")
-
 """
     ObservableAccumulator{ObsType<:AbstractObservable, T_high<:AbstractFloat, T_low<:Real}
 
@@ -13,7 +11,9 @@ An accumulator for observables in Monte Carlo simulations. This struct is design
 # Description
 `ObservableAccumulator` is typically used as part of the observer pattern in Monte Carlo simulations, where it collects measurements of observables at each step and provides methods for statistical analysis, such as computing averages and variances.
 
-# Example
+
+# See Also
+- [`BasicAccumulator`](@ref)
 """
 struct ObservableAccumulator{ObsType<:AbstractObservable,T_high<:AbstractFloat,T_low<:Real} <: AbstractObserver
     BasicAcc::BasicAccumulator{T_high}
@@ -29,7 +29,6 @@ function reset_accumulator!(Observables::ObservableAccumulator)
     return Observables
 end
 _type_stripped(::T) where T = nameof(T)
-
 """
     ObservableAccumulator(filename, Observable::AbstractObservable, BasicAcc::BasicAccumulator, m_proj::Integer, NWalkers::Integer, NThreads::Integer; Obs_Name = _type_stripped(Observable))
 
@@ -70,23 +69,52 @@ function saveObservables_before!(Observables::ObservableAccumulator,i,Walkers::A
 end
 
 function compute_ObsAccumBuffers!(Observables::ObservableAccumulator,i,Walkers::AbstractWalkerEnsemble)
+    numThreads = length(Observables.ObsFunc_buffer)
+    if numThreads == 1
+        _compute_ObsAccumBuffers_singlethreaded!(Observables,i,Walkers)
+    else
+        _compute_ObsAccumBuffers_multithreaded!(Observables,i,Walkers)
+    end
+    return
+end
+
+function _compute_ObsAccumBuffers_singlethreaded!(Observables::ObservableAccumulator,i,Walkers::AbstractWalkerEnsemble)
     (;ObsFunc_buffer,Obs_Buffers) = Observables
 
-    batches = ChunkSplitters.chunks(eachindex(Walkers), n = Threads.nthreads(),split= ChunkSplitters.RoundRobin())
+    ObsFunc! = ObsFunc_buffer[begin]
+
+    for α in eachindex(Walkers)
+        conf = getConfig(Walkers,α)
+        _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i,ObsFunc!)
+    end
+    return
+end
+
+function _compute_ObsAccumBuffers_multithreaded!(Observables::ObservableAccumulator,i,Walkers::AbstractWalkerEnsemble)
+    (;ObsFunc_buffer,Obs_Buffers) = Observables
+
+    batches = ChunkSplitters.chunks(eachindex(Walkers), n = length(ObsFunc_buffer),split = ChunkSplitters.RoundRobin())
 
     @sync for (i_chunk, αinds) in enumerate(batches)
         ObsFunc! = ObsFunc_buffer[i_chunk]
 
         Threads.@spawn for α in αinds
             conf = getConfig(Walkers,α)
-            # Obs_view = @view Obs_Buffers[:,α,i]
-
-            obs_val = obs(ObsFunc!)
-            ObsFunc!(obs_val,conf)
-            Obs_Buffers[:,α,i] .= obs_val #todo: allow LoopVectorization for CircularArrays?
+            _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i,ObsFunc!)
         end
     end
     return
+end
+
+Base.@propagate_inbounds function _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i,ObsFunc!)
+    obs_val = obs(ObsFunc!)
+    ObsFunc!(obs_val,conf)
+    # Obs_Buffers[:,α,i] .= obs_val #todo: allow LoopVectorization for CircularArrays?
+    Obs_buff_arr = parent(Obs_Buffers)
+    i_wrapped = mod1(i,lastindex(Obs_Buffers,3))
+    Base.@boundscheck checkbounds(Obs_buff_arr,1,α,i_wrapped)
+
+    LoopVectorization.@turbo Obs_buff_arr[:,α,i_wrapped] .= obs_val
 end
 
 function saveObservables_after!(Observables::ObservableAccumulator,i,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
@@ -98,7 +126,6 @@ end
 function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::AbstractWalkerEnsemble)
 
     (;Obs_numerator,Obs_denominator,Obs_Buffers) = Observables
-    (;PopulationMatrix,Gnps,reconfigurationTable) = Observables.BasicAcc
     (;PopulationMatrix,Gnps,reconfigurationTable) = Observables.BasicAcc
     
     compute_ObsAccumBuffers!(Observables,n,Walkers)    
