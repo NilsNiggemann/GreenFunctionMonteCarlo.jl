@@ -331,3 +331,53 @@ end
         end
     end
 end
+@testitem "RNG Threading reproducibility" begin
+    include("utils.jl")
+    using GreenFunctionMonteCarlo.Statistics:mean
+
+    σz(n::Bool) = (1 - 2 * n)
+    σz(i, conf::AbstractArray) = σz(conf[i])
+
+    using GreenFunctionMonteCarlo.LinearAlgebra
+    NSites = 8
+    NSteps = 50
+    mProj = 10
+    NWalkers = 8
+
+    Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
+    moves = eachcol(Bool.(I(NSites)))
+
+    offdiagElements = -ones(NSites)
+    Hxx = DiagOperator(x-> sum(σz(i, x) * σz(i + 1, x) for i in eachindex(x)[1:end-1]))
+
+    H = localOperator(moves, offdiagElements, Hxx, Hilbert)
+
+    config = BosonConfig(Hilbert)
+
+    logψ = GFMC.EqualWeightSuperposition()
+    CT = ContinuousTimePropagator(0.1)
+
+    prob1 = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+    prob2 = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+
+    BObs1 = GFMC.BasicObserver(NSteps, NWalkers)
+    BObs2 = GFMC.BasicObserver(NSteps, NWalkers)
+
+    RNG1 = TaskLocalRNG()
+    Random.seed!(RNG1, 1234)
+    runGFMC!(prob1, BObs1, NSteps;rng = RNG1, parallelization = GFMC.MultiThreaded(2))
+
+    RNG2 = TaskLocalRNG()
+    Random.seed!(RNG2, 1234)
+    runGFMC!(prob2, BObs2, NSteps;rng = RNG2, parallelization = GFMC.MultiThreaded(2))
+
+
+    @testset "rng confs" begin
+        @test prob1.Walkers.Configs == prob2.Walkers.Configs
+        @test prob1.Walkers.WalkerWeights == prob2.Walkers.WalkerWeights
+        @test BObs1.reconfigurationTable == BObs2.reconfigurationTable
+        @test BObs1.energies == BObs2.energies
+        @test BObs1.TotalWeights == BObs2.TotalWeights
+    end
+end
+
