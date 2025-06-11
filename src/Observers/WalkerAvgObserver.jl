@@ -25,7 +25,6 @@ function saveObservables_after!(Observables::WalkerAVGObserver,n,Walkers::Abstra
             average_configs[i,n] += conf[i]
         end
     end
-    # println(Base.format_bytes(a))
     average_configs[:,n] ./= length(eachindex(Walkers))
     return nothing
 end
