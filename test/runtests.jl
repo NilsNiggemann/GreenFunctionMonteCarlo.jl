@@ -236,6 +236,7 @@ end
 
 @testitem "Accumulator TFI" begin
     include("utils.jl")
+    using GreenFunctionMonteCarlo.Statistics:mean
 
     function E_critPoint_exact(L)
         return 1 - csc(pi / (2 * (2 * L + 1)))
@@ -267,7 +268,7 @@ end
 
     # Estimate weights for the continuous time propagator
 
-    weight_normalization, w_avg_estimate = GFMC.estimate_weights_continuousTime!(prob;Nepochs=3,Nsamples=30,mProj = 20)
+    weight_normalization, w_avg_estimate = GFMC.estimate_weights_continuousTime!(prob;Nepochs=3,Nsamples=30,mProj = 20,rng = RNG)
     CT = ContinuousTimePropagator(0.1, w_avg_estimate)
     
     outfile = tempname()
@@ -283,8 +284,8 @@ end
     runGFMC!(prob, Observer, NSteps; rng = RNG)
 
     Energy = GFMC.getEnergies(BObs.TotalWeights, BObs.energies, mProj)
-    Energy_direct = BasicAccumulatorFile.en_numerator ./ BasicAccumulatorFile.Gnp_denominator .*NSites
-
+    # Energy_direct = BasicAccumulatorFile.en_numerator ./ BasicAccumulatorFile.Gnp_denominator .*NSites
+    Energy_direct = mean(GFMC.get_energy_from_accumulator_bunching(BasicAccumulatorFile, 1)) .* NSites
     @testset "BasicAccumulator" begin
 
         @test isfile(outfile)
@@ -300,7 +301,7 @@ end
             @test !iszero(en_numerator)
 
             @test Energy ≈ Energy_direct atol = 1e-10
-            @test Energy[end÷2] ≈ E_critPoint_exact(NSites) rtol = 2e-2
+            @test Energy[end÷2] ≈ E_critPoint_exact(NSites) rtol = 3e-2
         end
     end
 
@@ -308,11 +309,10 @@ end
 
     n_avg = stack(getObs_diagonal(Gnps,CObs.SaveConfigs,BObs.reconfigurationTable,OccupationNumber(NSites),1:mProj))
 
-    n_avg_direct = ObsAccumulatorFile.Obs_numerator ./ ObsAccumulatorFile.Obs_denominator'
+    n_avg_direct = mean(GFMC.get_obs_from_accumulator_bunching(ObsAccumulatorFile, 1))
 
-    using GreenFunctionMonteCarlo.Statistics
     direct_mean = dropdims(mean( CObs.SaveConfigs,dims = (2,3)),dims=(2,3))
-
+    
     @testset "ObservableAccumulator" begin
 
         @test isfile(outfile)

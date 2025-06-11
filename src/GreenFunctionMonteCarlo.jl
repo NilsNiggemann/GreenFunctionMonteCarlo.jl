@@ -57,7 +57,7 @@ module GreenFunctionMonteCarlo
     include("Observers/BasicObserver.jl")
     include("Observers/CombinedObserver.jl")
     include("Observers/ConfigObserver.jl")
-    export BasicObserver, ConfigurationObserver, ConfigObserver
+    export BasicObserver, ConfigurationObserver,CombinedObserver, ConfigObserver
 
     include("DefaultFormalism/BosonicConfig.jl")
     export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, HardCoreConstraint, fulfills_constraint
@@ -113,4 +113,9 @@ module GreenFunctionMonteCarlo
     include("Observers/estimate_weights.jl")
     export estimate_weights_continuousTime!
 
+    include("Observers/WalkerAvgObserver.jl")
+    export WalkerAVGObserver
+
+    include("CorrelationAnalysis/BinningAnalysis.jl")
+    
 end # module
