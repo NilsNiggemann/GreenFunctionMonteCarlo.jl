@@ -15,14 +15,14 @@ struct CombinedObserver{T} <: AbstractObserver
 end
 
 function saveObservables_before!(Observer::CombinedObserver,i,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
-    for obs in Observer.Observers
+    map(Observer.Observers) do obs # use map for loop unrolling and type stability
         saveObservables_before!(obs,i,Walkers,H,reconfiguration)
     end
     return nothing
 end
 
 function saveObservables_after!(Observer::CombinedObserver,i,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
-    for obs in Observer.Observers
+    map(Observer.Observers) do obs
         saveObservables_after!(obs,i,Walkers,H,reconfiguration)
     end
     return nothing

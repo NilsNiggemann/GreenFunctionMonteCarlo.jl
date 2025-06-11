@@ -98,9 +98,9 @@ end
     Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
     x = BosonConfig(Hilbert)
     
-    rand!(x)
-
     RNG = StableRNG(1234)
+    rand!(RNG,x)
+
     d = rand(RNG, Nsites)
     v = rand(RNG, Nsites, Nsites)
 
@@ -190,12 +190,12 @@ end
     (;Hilbert,H) = getExampleHardcore(3,4,StableRNG(1234))
 
     config = BosonConfig(Hilbert)
-    rand!(config)
+    RNG = StableRNG(1234)
+    rand!(RNG,config)
     logψ = GFMC.EqualWeightSuperposition()
     NWalkers = 10
     CT = ContinuousTimePropagator(1.)
     
-    RNG = StableRNG(1234)
 
     prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
 
@@ -234,6 +234,154 @@ end
     end
 end
 
+@testitem "Accumulator TFI" begin
+    include("utils.jl")
+    using GreenFunctionMonteCarlo.Statistics:mean
+
+    function E_critPoint_exact(L)
+        return 1 - csc(pi / (2 * (2 * L + 1)))
+    end
+    σz(n::Bool) = (1 - 2 * n)
+    σz(i, conf::AbstractArray) = σz(conf[i])
+
+    using GreenFunctionMonteCarlo.LinearAlgebra
+    NSites = 2
+    NSteps = 1500
+    mProj = 20
+    NWalkers = 2
+
+    RNG = StableRNG(1234)
+
+    Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
+    moves = eachcol(Bool.(I(NSites))) # each move flips a single spin
+    offdiagElements = -ones(NSites)
+    Hxx = DiagOperator(x-> sum(σz(i, x) * σz(i + 1, x) for i in eachindex(x)[1:end-1]))
+
+    H = localOperator(moves, offdiagElements, Hxx, Hilbert)
+
+    config = BosonConfig(Hilbert)
+    rand!(RNG,config)
+    logψ = GFMC.EqualWeightSuperposition()
+    CT = ContinuousTimePropagator(0.1)
+    
+    prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+
+    # Estimate weights for the continuous time propagator
+
+    weight_normalization, w_avg_estimate = GFMC.estimate_weights_continuousTime!(prob;Nepochs=3,Nsamples=30,mProj = 20,rng = RNG)
+    CT = ContinuousTimePropagator(0.1, w_avg_estimate)
+    
+    outfile = tempname()
+
+    BObs = GFMC.BasicObserver(outfile, NSteps, NWalkers)
+    CObs = GFMC.ConfigurationObserver(outfile, config, NSteps, NWalkers)
+    
+    BasicAccumulatorFile = GFMC.BasicAccumulator(outfile, mProj, NWalkers; weight_normalization)
+    ObsAccumulatorFile = GFMC.ObservableAccumulator(outfile,OccupationNumber(NSites),BasicAccumulatorFile, mProj, NWalkers, Threads.nthreads())
+
+    Observer = GFMC.CombinedObserver((BObs, CObs,BasicAccumulatorFile, ObsAccumulatorFile))
+
+    runGFMC!(prob, Observer, NSteps; rng = RNG)
+
+    Energy = GFMC.getEnergies(BObs.TotalWeights, BObs.energies, mProj)
+    # Energy_direct = BasicAccumulatorFile.en_numerator ./ BasicAccumulatorFile.Gnp_denominator .*NSites
+    Energy_direct = mean(GFMC.get_energy_from_accumulator_bunching(BasicAccumulatorFile, 1)) .* NSites
+    @testset "BasicAccumulator" begin
+
+        @test isfile(outfile)
+
+        GFMC.HDF5.h5open(outfile, "r") do file
+            @test haskey(file, "Gnp_denominator")
+
+            Gnp_denominator = read(file["Gnp_denominator"])
+
+            @test haskey(file, "en_numerator")
+            en_numerator = read(file["en_numerator"])
+            @test !iszero(Gnp_denominator)
+            @test !iszero(en_numerator)
+
+            @test Energy ≈ Energy_direct atol = 1e-10
+            @test Energy[end÷2] ≈ E_critPoint_exact(NSites) rtol = 3e-2
+        end
+    end
+
+    Gnps = GFMC.precomputeNormalizedAccWeight(BObs.TotalWeights,2mProj)
+
+    n_avg = stack(getObs_diagonal(Gnps,CObs.SaveConfigs,BObs.reconfigurationTable,OccupationNumber(NSites),1:mProj))
+
+    n_avg_direct = mean(GFMC.get_obs_from_accumulator_bunching(ObsAccumulatorFile, 1))
+
+    direct_mean = dropdims(mean( CObs.SaveConfigs,dims = (2,3)),dims=(2,3))
+    
+    @testset "ObservableAccumulator" begin
+
+        @test isfile(outfile)
+        GFMC.HDF5.h5open(outfile, "r") do file
+            @test haskey(file, "OccupationNumber_denominator")
+
+            OccupationNumber_denominator = read(file["OccupationNumber_denominator"])
+
+            @test haskey(file, "OccupationNumber_numerator")
+            OccupationNumber_numerator = read(file["OccupationNumber_numerator"])
+            @test !iszero(OccupationNumber_denominator)
+            @test !iszero(OccupationNumber_numerator)
+
+            @test n_avg_direct[:,1] ≈ direct_mean atol = 1e-13
+            @test n_avg ≈ n_avg_direct atol = 1e-10
+        end
+    end
+end
+@testitem "RNG Threading reproducibility" begin
+    include("utils.jl")
+    using GreenFunctionMonteCarlo.Statistics:mean
+
+    σz(n::Bool) = (1 - 2 * n)
+    σz(i, conf::AbstractArray) = σz(conf[i])
+
+    using GreenFunctionMonteCarlo.LinearAlgebra
+    NSites = 8
+    NSteps = 50
+    mProj = 10
+    NWalkers = 8
+
+    Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
+    moves = eachcol(Bool.(I(NSites)))
+
+    offdiagElements = -ones(NSites)
+    Hxx = DiagOperator(x-> sum(σz(i, x) * σz(i + 1, x) for i in eachindex(x)[1:end-1]))
+
+    H = localOperator(moves, offdiagElements, Hxx, Hilbert)
+
+    config = BosonConfig(Hilbert)
+
+    logψ = GFMC.EqualWeightSuperposition()
+    CT = ContinuousTimePropagator(0.1)
+
+    prob1 = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+    prob2 = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+
+    BObs1 = GFMC.BasicObserver(NSteps, NWalkers)
+    BObs2 = GFMC.BasicObserver(NSteps, NWalkers)
+
+    RNG1 = TaskLocalRNG()
+    Random.seed!(RNG1, 1234)
+    runGFMC!(prob1, BObs1, NSteps;rng = RNG1, parallelization = GFMC.MultiThreaded(2))
+
+    RNG2 = TaskLocalRNG()
+    Random.seed!(RNG2, 1234)
+    runGFMC!(prob2, BObs2, NSteps;rng = RNG2, parallelization = GFMC.MultiThreaded(2))
+
+
+    @testset "rng confs" begin
+        @test prob1.Walkers.Configs == prob2.Walkers.Configs
+        @test prob1.Walkers.WalkerWeights == prob2.Walkers.WalkerWeights
+        @test BObs1.reconfigurationTable == BObs2.reconfigurationTable
+        @test BObs1.energies == BObs2.energies
+        @test BObs1.TotalWeights == BObs2.TotalWeights
+    end
+end
+
 include("Jastrow_tests.jl")
 include("parTemp_test.jl")
 @run_package_tests verbose=true
+

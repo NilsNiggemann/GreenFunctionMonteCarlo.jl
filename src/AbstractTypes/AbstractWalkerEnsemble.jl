@@ -12,6 +12,7 @@ An abstract type that represents an ensemble of configurations (i.e. spins, boso
 - `Base.eachindex(X::AbstractWalkerEnsemble)`: iterate over the indices of the ensemble.
 - `getNWalkers(X::AbstractWalkerEnsemble)`: get the number of walkers in the ensemble.
 - `getConfigs(X::AbstractWalkerEnsemble)`: get all configurations in the ensemble.
+- `getLocalEnergies(X::AbstractWalkerEnsemble)`: get the local energies of the walkers in the ensemble.
 """
 abstract type AbstractWalkerEnsemble end
 
@@ -19,6 +20,7 @@ function getConfig end
 function getMoveWeights end
 function getWalkerWeights end
 function getBuffer end
+function getLocalEnergies end
 Base.eachindex(WE::AbstractWalkerEnsemble) = eachindex(getWalkerWeights(WE))
 NWalkers(X::AbstractWalkerEnsemble) = length(eachindex(X))
 

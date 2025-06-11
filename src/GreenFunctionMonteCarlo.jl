@@ -15,14 +15,15 @@ where $H_{x, x'}$ is the matrix element of the Hamiltonian between two configura
 using GreenFunctionMonteCarlo, LinearAlgebra
 NSites = 3
 Nwalkers = 10
+NSteps = 10
 Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
-moves = Bool.(I(NSites)) # each move flips a single spin
+moves = eachcol(Bool.(I(NSites))) # each move flips a single spin
 offdiagElements = -ones(NSites)
-H = localOperator(moves, offdiagElements, DiagOperator(x->0), Hilbert)
+H = localOperator(eachrow(moves), offdiagElements, DiagOperator(x->0), Hilbert)
 
-prob = GFMCProblem(BosonConfig(Hilbert), Nwalkers, ContinuousTimePropagator(0.1); logψ = EqualWeightSuperposition(), H, Hilbert)
-Observer = ConfigObserver(startConfig, NSteps, NWalkers) # Observer to measure the energy and configurations
-runGFMC!(problem, NoObserver(), NStepsEquil) #run for NStepsEquil steps without observing to equilibrate
+problem = GFMCProblem(BosonConfig(Hilbert), Nwalkers, ContinuousTimePropagator(0.1); logψ = EqualWeightSuperposition(), H, Hilbert)
+Observer = ConfigObserver(BosonConfig(Hilbert), NSteps, Nwalkers) # Observer to measure the energy and configurations
+runGFMC!(problem, NoObserver(), 100) #run for 100 steps without observing to equilibrate
 runGFMC!(problem, Observer, NSteps) #run for NSteps steps
 ```
 """
@@ -39,7 +40,7 @@ module GreenFunctionMonteCarlo
     import LinearAlgebra
     import LoopVectorization
     import ProgressMeter
-
+    import CircularArrays
     include("utils.jl")
     export createMMapArray, readMMapArray
 
@@ -56,7 +57,7 @@ module GreenFunctionMonteCarlo
     include("Observers/BasicObserver.jl")
     include("Observers/CombinedObserver.jl")
     include("Observers/ConfigObserver.jl")
-    export BasicObserver, ConfigurationObserver, ConfigObserver
+    export BasicObserver, ConfigurationObserver,CombinedObserver, ConfigObserver
 
     include("DefaultFormalism/BosonicConfig.jl")
     export BosonConfig, BosonHilbertSpace, OccupationNumberConstraint, HardCoreConstraint, fulfills_constraint
@@ -86,7 +87,6 @@ module GreenFunctionMonteCarlo
     include("Variational/NaiveFunction.jl")
     export NaiveFunction
 
-
     include("Loggers/LoggerUtils.jl")
 
     include("Loggers/NoLogger.jl")
@@ -102,4 +102,22 @@ module GreenFunctionMonteCarlo
     export getObs_diagonal
 
     include("Optional/ParallelTempering/parallelTempering.jl")
+    
+    include("Observables/OccupationNumber.jl")
+    export OccupationNumber
+
+    include("Observers/BasicAccumulator.jl")
+    export BasicAccumulator
+
+    include("Observers/ObservableAccumulator.jl")
+    export ObservableAccumulator
+
+    include("Observers/estimate_weights.jl")
+    export estimate_weights_continuousTime!
+
+    include("Observers/WalkerAvgObserver.jl")
+    export WalkerAVGObserver
+
+    include("CorrelationAnalysis/BinningAnalysis.jl")
+    
 end # module

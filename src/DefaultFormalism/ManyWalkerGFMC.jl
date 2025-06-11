@@ -29,22 +29,21 @@ function getLocalEnergy(x::AbstractConfig,H::AbstractSignFreeOperator,logψ::Abs
     return getLocalEnergy(x,weights,Hxx)
 end
 
-function getLocalEnergy(WE::AbstractWalkerEnsemble,α,Hxx::DiagonalOperator)
-    Config = getConfig(WE,α)
-    moveWeights = getMoveWeights(WE,α)
-    return getLocalEnergy(Config,moveWeights,Hxx)
-end
+# function getLocalEnergy(WE::AbstractWalkerEnsemble,α,Hxx::DiagonalOperator)
+#     Config = getConfig(WE,α)
+#     moveWeights = getMoveWeights(WE,α)
+#     return getLocalEnergy(Config,moveWeights,Hxx)
+# end
 
 function getLocalEnergyWalkers_before(Walkers::AbstractWalkerEnsemble,Hxx::DiagonalOperator)
     num = 0.
     denom = 0.
     WalkerWeights = getWalkerWeights(Walkers)
-    for α in eachindex(Walkers)
-        eloc = getLocalEnergy(Walkers,α,Hxx)
-        num += WalkerWeights[α]*eloc
-        denom += WalkerWeights[α]
-    end
+    localEnergies = getLocalEnergies(Walkers)
 
+    num = WalkerWeights' * localEnergies
+    denom = sum(WalkerWeights)
+    
     return num/denom
 end
 
@@ -129,7 +128,7 @@ struct GFMCProblem{WE<:AbstractWalkerEnsemble,Prop<:AbstractPropagator,GF<:Abstr
     reconfiguration::RS
 end
 
-function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,logψ::AbstractGuidingFunction;parallelization = MultiThreaded(NWalkers),reconfiguration = MinimalReconfiguration(NWalkers))
+function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,logψ::AbstractGuidingFunction;parallelization = MultiThreaded(num_tasks_default(NWalkers)),reconfiguration = MinimalReconfiguration(NWalkers))
     WE = allocate_walkerEnsemble(config,logψ,NWalkers,H)
 
     moves_vals = get_offdiagonal_elements(H)

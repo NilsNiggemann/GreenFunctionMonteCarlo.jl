@@ -1,4 +1,4 @@
-function precomputeNormalizedAccWeight(weights,PMax;normalize=true)
+function precomputeNormalizedAccWeight(weights::AbstractVector,PMax;normalize=true)
     bn = weights
     meanweight = normalize ? Statistics.mean(bn) : 1
     
@@ -18,7 +18,7 @@ function precomputeNormalizedAccWeight(weights,PMax;normalize=true)
     end
     return Gnp
 end
-
+precomputeNormalizedAccWeight(Observer,PMax;kwargs...) = precomputeNormalizedAccWeight(getObs(Observer).TotalWeights,PMax;kwargs...)
 """
     getEnergies(weights, localEnergies, PMax; kwargs...)
 

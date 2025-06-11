@@ -1,4 +1,4 @@
-function getObs_diagonal(Gnps,AllConfigs::AbstractArray{T,3},reconfigurationTable,ObsFunc::AbstractObservable,m_values) where T
+function getObs_diagonal(Gnps::AbstractMatrix,AllConfigs::AbstractArray{T,3},reconfigurationTable,ObsFunc::AbstractObservable,m_values) where T
     N = lastindex(AllConfigs,ndims(AllConfigs))
 
     Nw = lastindex(AllConfigs,ndims(AllConfigs)-1)
@@ -19,11 +19,10 @@ function getObs_diagonal(Gnps,AllConfigs::AbstractArray{T,3},reconfigurationTabl
 
     _fill_obs_buffer!(ObsBuffer,1:m_max,ObsFunc,AllConfigs,m_max)
 
-    for n in 2:N
+    for n in 1:N
         getPopulationMatrix!(PopulationMatrix,reconfigurationTable,n,m_max-1)
-        _fill_obs_buffer!(ObsBuffer,n-1,ObsFunc,AllConfigs,m_max)
-
-        Threads.@threads for m_index in eachindex(m_values)
+        _fill_obs_buffer!(ObsBuffer,n,ObsFunc,AllConfigs,m_max)
+        for m_index in eachindex(m_values)
             m = m_values[m_index]
             Gnp = Gnps[n,1+2m]
             Gnp == 0 && continue
@@ -47,7 +46,13 @@ function getObs_diagonal(Gnps,AllConfigs::AbstractArray{T,3},reconfigurationTabl
     return num_m
     
 end
-
+function getObs_diagonal(Observer,ObsFunc::AbstractObservable,m_values)
+    Obs = getObs(Observer)
+    Gnps = precomputeNormalizedAccWeight(Obs.TotalWeights,2*maximum(m_values))
+    SaveConfigs = Obs.SaveConfigs
+    reconfigurationTable = Obs.reconfigurationTable
+    return getObs_diagonal(Gnps,SaveConfigs,reconfigurationTable,ObsFunc,m_values)
+end
 
 function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
     nMax = size(reconfigurationTable,2)
