@@ -62,14 +62,14 @@ get_num_bins(Observables::BasicAccumulator) = size(Observables.en_numerator,2)
 get_bin_elements(Observables::BasicAccumulator) = Observables.bin_elements
 
 function reset_accumulator!(Observables::BasicAccumulator;hard_reset=true)
-    set_zero!(Observables.en_numerator)
-    set_zero!(Observables.Gnp_denominator)
+    set_zero!(Observables.TotalWeights)
+    set_zero!(Observables.energies)
+    set_zero!(Observables.reconfigurationTable)
+    set_zero!(Observables.PopulationMatrix)
+    set_zero!(Observables.Gnps)
     if hard_reset 
-        set_zero!(Observables.TotalWeights)
-        set_zero!(Observables.energies)
-        set_zero!(Observables.Gnps)
-        set_zero!(Observables.reconfigurationTable)
-        set_zero!(Observables.PopulationMatrix)
+        set_zero!(Observables.en_numerator)
+        set_zero!(Observables.Gnp_denominator)
     end
     return Observables
 end
@@ -153,14 +153,15 @@ Compute the energy by bunching together observable accumulators.
 # Description
 This function processes the accumulated observables by grouping (bunching) the data into `n_bunch` groups. It then calculates the energy, which can be used for error analysis or to reduce autocorrelation effects in Monte Carlo simulations.
 """
-function get_energy_from_accumulator_bunching(Observables::BasicAccumulator,n_bunch::Integer;kwargs...)
+function get_energy_from_accumulator_bunching(Observables::Union{BasicAccumulator,<:NamedTuple},n_bunch::Integer;kwargs...)
     chunks = ChunkSplitters.chunks(axes(Observables.Gnp_denominator,2), size = n_bunch, split = ChunkSplitters.Consecutive();kwargs...)
     return [
         get_energy_from_accumulator(Observables,chunk)
         for chunk in chunks
     ]
 end
-@views function get_energy_from_accumulator(Obs::BasicAccumulator,bin_indices::AbstractVector)
+    
+@views function get_energy_from_accumulator(Obs::Union{BasicAccumulator,<:NamedTuple},bin_indices::AbstractVector)
     Normalization = Statistics.mean(Obs.Gnp_denominator[1,:])
 
     En_num = zeros(eltype(Obs.en_numerator),size(Obs.en_numerator,1))
@@ -173,4 +174,8 @@ end
     En_num ./= Gnp_denom
     return En_num
 end
-get_energy_from_accumulator(Observables::BasicAccumulator) = [get_energy_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
+get_energy_from_accumulator(Observables) = [get_energy_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
+
+log_observable(O::BasicAccumulator,i) = (log_walker_survival_ratio(O.reconfigurationTable,i),log_Obs_energy(O,i),log_Obs_weights(O,i))
+log_Obs_energy(O::BasicAccumulator,i) = ("eloc",strd(O.energies[i]))
+log_Obs_weights(O::BasicAccumulator,i) = ("w_avg",strd(O.TotalWeights[i]))
