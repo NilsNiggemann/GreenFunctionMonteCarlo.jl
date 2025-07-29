@@ -165,7 +165,7 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
     end
 end
 
-@views function get_obs_from_accumulator(Obs::ObservableAccumulator,bin_indices::AbstractVector)
+@views function get_obs_from_accumulator(Obs::Union{ObservableAccumulator,NamedTuple},bin_indices::AbstractVector)
     # Obs_num_slices = Obs.Obs_numerators[:,:,bin_indices]
     # Obs_denom_slices = Obs.Obs_denominators[:,bin_indices]
 
@@ -181,8 +181,8 @@ end
     Obs_num ./= Obs_denom'
     return Obs_num
 end
-get_obs_from_accumulator(Observables::ObservableAccumulator) = [get_obs_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
-function get_obs_from_accumulator_bunching(Observables::ObservableAccumulator,n_bunch::Integer;kwargs...)
+get_obs_from_accumulator(Observables::Union{ObservableAccumulator,NamedTuple}) = [get_obs_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
+function get_obs_from_accumulator_bunching(Observables::Union{ObservableAccumulator,NamedTuple},n_bunch::Integer;kwargs...)
     chunks = ChunkSplitters.chunks(axes(Observables.Obs_denominators,2), size = n_bunch, split = ChunkSplitters.Consecutive();kwargs...)
     return [
         get_obs_from_accumulator(Observables,chunk)
