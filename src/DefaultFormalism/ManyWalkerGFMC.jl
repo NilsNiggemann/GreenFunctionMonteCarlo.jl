@@ -92,6 +92,7 @@ This function performs the GFMC simulation by evolving the walker ensemble using
 """
 function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,reconfiguration::AbstractReconfigurationScheme,range,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,logger::AbstractLogger,RNG::Random.AbstractRNG)
     iter = 0
+    compute_GWF_buffers!(Walkers,logψ)
     for i in range
         iter += 1
         propagateWalkers!(Walkers,H,logψ,Hilbert,propagator,parallelizer,RNG)
