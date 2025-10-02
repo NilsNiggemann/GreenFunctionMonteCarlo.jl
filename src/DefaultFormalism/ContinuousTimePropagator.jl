@@ -86,4 +86,7 @@ function continuos_time_propagation_walker!(WE::AbstractWalkerEnsemble, α::Int,
     w = exp(log_w - dτ * w_avg_estimate)
     WalkerWeights = getWalkerWeights(WE)
     WalkerWeights[α] = w
+    localEnergies = getLocalEnergies(WE)
+    localEnergies[α] = el_x
+    return nothing
 end

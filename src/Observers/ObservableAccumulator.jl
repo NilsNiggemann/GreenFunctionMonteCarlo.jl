@@ -19,13 +19,14 @@ struct ObservableAccumulator{ObsType<:AbstractObservable,T_high<:AbstractFloat,T
     BasicAcc::BasicAccumulator{T_high}
     ObsFunc_buffer::Vector{ObsType}
     Obs_Buffers::CircularArrays.CircularArray{T_low, 3, Array{T_low, 3}}
-    Obs_numerator::Matrix{T_high}
-    Obs_denominator::Vector{T_high}
+    Obs_numerators::Array{T_high,3}
+    Obs_denominators::Matrix{T_high}
 end
+projection_order(Observables::ObservableAccumulator) = size(Observables.Obs_denominators,1) - 1
+
 function reset_accumulator!(Observables::ObservableAccumulator)
-    reset_accumulator!(Observables.BasicAcc)
-    set_zero!(Observables.Obs_numerator)
-    set_zero!(Observables.Obs_denominator)
+    set_zero!(Observables.Obs_numerators)
+    set_zero!(Observables.Obs_denominators)
     return Observables
 end
 _type_stripped(::T) where T = nameof(T)
@@ -46,18 +47,19 @@ Constructs an `ObservableAccumulator` for accumulating measurements of a given o
 # Returns
 An `ObservableAccumulator` object configured for the specified observable and simulation parameters.
 """
-function ObservableAccumulator(filename,Observable::AbstractObservable,BasicAcc::BasicAccumulator,m_proj::Integer,NWalkers::Integer,NThreads::Integer; Obs_Name = _type_stripped(Observable))
-    p_proj = 2m_proj
+function ObservableAccumulator(filename,Observable::AbstractObservable,BasicAcc::BasicAccumulator,m_proj::Integer,NWalkers::Integer,NThreads::Integer;Obs_Name = _type_stripped(Observable))
     Obs_out = obs(Observable)
     NumObs = length(Obs_out)
+
+    num_bins = get_num_bins(BasicAcc)
 
     ObsFunc_buffer = [copy(Observable) for _ in 1:NThreads]
     Obs_Buffers = CircularArrays.CircularArray(zeros(eltype(Obs_out),NumObs,NWalkers,m_proj))
 
-    Obs_numerator = maybe_MMap_array(filename,"$(Obs_Name)_numerator",Float64,(NumObs,m_proj,))
-    Obs_denominator = maybe_MMap_array(filename,"$(Obs_Name)_denominator",Float64,(m_proj,))
+    Obs_numerators = maybe_MMap_array(filename,"$(Obs_Name)_numerator",Float64,(NumObs,m_proj,num_bins))
+    Obs_denominators = maybe_MMap_array(filename,"$(Obs_Name)_denominator",Float64,(m_proj,num_bins))
 
-    ObsAcc = ObservableAccumulator(BasicAcc,ObsFunc_buffer,Obs_Buffers,Obs_numerator,Obs_denominator)
+    ObsAcc = ObservableAccumulator(BasicAcc,ObsFunc_buffer,Obs_Buffers,Obs_numerators,Obs_denominators)
     return ObsAcc
 end
 
@@ -109,10 +111,9 @@ end
 Base.@propagate_inbounds function _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i,ObsFunc!)
     obs_val = obs(ObsFunc!)
     ObsFunc!(obs_val,conf)
-    # Obs_Buffers[:,α,i] .= obs_val #todo: allow LoopVectorization for CircularArrays?
     Obs_buff_arr = parent(Obs_Buffers)
     i_wrapped = mod1(i,lastindex(Obs_Buffers,3))
-    Base.@boundscheck checkbounds(Obs_buff_arr,1,α,i_wrapped)
+    Base.@boundscheck checkbounds(Obs_buff_arr,:,α,i_wrapped)
 
     LoopVectorization.@turbo Obs_buff_arr[:,α,i_wrapped] .= obs_val
 end
@@ -125,11 +126,11 @@ end
 
 function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::AbstractWalkerEnsemble)
 
-    (;Obs_numerator,Obs_denominator,Obs_Buffers) = Observables
+    (;Obs_numerators,Obs_denominators,Obs_Buffers) = Observables
     (;PopulationMatrix,Gnps,reconfigurationTable) = Observables.BasicAcc
     
     compute_ObsAccumBuffers!(Observables,n,Walkers)    
-    m_max = length(Obs_denominator) - 1
+    m_max = projection_order(Observables)
 
     getPopulationMatrix!(PopulationMatrix,reconfigurationTable,n,m_max)
     Nw = length(eachindex(Walkers))
@@ -137,7 +138,15 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
 
     Nw⁻¹ = 1/Nw
     m_values = 0:m_max
-    Threads.@threads for m_index in eachindex(m_values)
+    
+    bin_index = get_bin_index(n,Observables.BasicAcc)
+
+    Base.@boundscheck checkbounds(Obs_Buffers_arr,axes(Obs_numerators,1),1:Nw,:)
+    Base.@boundscheck checkbounds(m_values,axes(Obs_numerators,2))
+    Base.@boundscheck checkbounds(Obs_numerators,:,:,bin_index)
+    PopulationMatrix_parent = parent(PopulationMatrix)
+    Nw⁻¹ = 1/Nw
+    Threads.@threads for m_index in axes(Obs_numerators,2)
         m = m_values[m_index]
         Gnp = Gnps[n,1+2m]
         Gnp == 0 && continue
@@ -156,4 +165,29 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
             end
         end
     end
+end
+
+@views function get_obs_from_accumulator(Obs::ObservableAccumulator,bin_indices::AbstractVector)
+    # Obs_num_slices = Obs.Obs_numerators[:,:,bin_indices]
+    # Obs_denom_slices = Obs.Obs_denominators[:,bin_indices]
+
+    Normalization = Statistics.mean(Obs.Obs_denominators[1,:])
+
+    Obs_num = zeros(eltype(Obs.Obs_numerators),size(Obs.Obs_numerators,1),size(Obs.Obs_numerators,2))
+    Obs_denom = zeros(eltype(Obs.Obs_denominators),size(Obs.Obs_denominators,1))
+
+    for bin_idx in bin_indices
+        Obs_num .+= Obs.Obs_numerators[:,:,bin_idx] ./ Normalization
+        Obs_denom .+= Obs.Obs_denominators[:,bin_idx] ./ Normalization 
+    end
+    Obs_num ./= Obs_denom'
+    return Obs_num
+end
+get_obs_from_accumulator(Observables::ObservableAccumulator) = [get_obs_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
+function get_obs_from_accumulator_bunching(Observables::ObservableAccumulator,n_bunch::Integer;kwargs...)
+    chunks = ChunkSplitters.chunks(axes(Observables.Obs_denominators,2), size = n_bunch, split = ChunkSplitters.Consecutive();kwargs...)
+    return [
+        get_obs_from_accumulator(Observables,chunk)
+        for chunk in chunks
+    ]
 end

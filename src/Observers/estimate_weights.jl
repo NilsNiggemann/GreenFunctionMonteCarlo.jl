@@ -17,12 +17,12 @@ This function performs an in-place estimation of weights for a given problem usi
 - Modifies `prob` in place which helps to equilibrate
 - Returns a rough estimate of the mean total weight and CT.w_avg_estimate.
 """
-function estimate_weights_continuousTime!(prob;Nepochs=5,Nsamples=100,mProj = 50,verbose = false)
+function estimate_weights_continuousTime!(prob;Nepochs=5,Nsamples=100,mProj = 50,verbose = false,kwargs...)
     Observer = BasicObserver(Nsamples, NWalkers(prob.Walkers))
     CT = prob.Propagator
     mean_TotalWeights = 1.
     for epoch in 1:Nepochs
-        runGFMC!(prob, Observer, Nsamples; Propagator = CT)
+        runGFMC!(prob, Observer, Nsamples; Propagator = CT,kwargs...)
         mean_TotalWeights = Statistics.mean(Observer.TotalWeights)
         E0tau = getEnergies(Observer.TotalWeights, Observer.energies, mProj)
         E0_ind = findfirst(<=(0), diff(E0tau))
