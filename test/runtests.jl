@@ -335,9 +335,6 @@ end
     include("utils.jl")
     using GreenFunctionMonteCarlo.Statistics:mean
 
-    σz(n::Bool) = (1 - 2 * n)
-    σz(i, conf::AbstractArray) = σz(conf[i])
-
     using GreenFunctionMonteCarlo.LinearAlgebra
     NSites = 8
     NSteps = 50
