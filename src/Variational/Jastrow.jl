@@ -18,11 +18,15 @@ struct Jastrow{T<:Real} <: AbstractGuidingFunction
     m_i::Vector{T}
     v_ij::Matrix{T}
     buffer_reset_max::Int
+    Jastrow{T}(m_i::Vector{T}, v_ij::Matrix{T}, buffer_reset_max::Int) where {T<:Real} = new{T}(m_i, v_ij, buffer_reset_max)
 end
-Jastrow(m_i::AbstractVector,v_ij::AbstractMatrix; buffer_reset_max=3_000) = Jastrow(m_i,_make_symmetric(v_ij),buffer_reset_max)
-Jastrow(conf::AbstractArray,args...;kwargs...) = Jastrow(length(conf),args...;kwargs...)
 
-_make_symmetric(v::AbstractMatrix) =  (v+v')/2
+function Jastrow(m_i::AbstractVector{T}, v_ij::AbstractMatrix{T}, buffer_reset_max::Int) where {T<:Real}
+    @assert LinearAlgebra.issymmetric(v_ij) "v_ij must be exactly symmetric! If v_ij is lower-triangular, use v_ij + v_ij' to symmetrize it."
+    Jastrow{T}(m_i, v_ij, buffer_reset_max)
+end
+Jastrow(m_i::AbstractVector,v_ij::AbstractMatrix; buffer_reset_max=3_000) = Jastrow(m_i,v_ij,buffer_reset_max)
+Jastrow(conf::AbstractArray,args...;kwargs...) = Jastrow(length(conf),args...;kwargs...)
 
 function Jastrow(N::Int,Type = Float32; buffer_reset_max=3_000)
     m_i = zeros(Type,N)
