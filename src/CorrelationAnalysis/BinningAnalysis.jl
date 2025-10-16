@@ -9,12 +9,6 @@ Groups or "bunches" the input data vector into bins for statistical autocorrelat
 # Returns
 - A binned version of the input data, typically as a vector or collection of bins, depending on the implementation.
 
-# Example
-
-
-# See Also
-- [`bin_data`](@ref)
-- [`autocorrelation`](@ref)
 """
 function data_bunch(data::AbstractVector{T}) where T
     Base.require_one_based_indexing(data)
