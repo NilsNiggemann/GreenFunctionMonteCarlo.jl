@@ -151,7 +151,7 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
         Gnp = Gnps[n,1+2m]
         Gnp == 0 && continue
         # @info "" n m Gnp
-        Obs_denominator[m_index] += Gnp
+        Obs_denominators[m_index] += Gnp
         # Obs_denominator[m_index] += Gnp*Nw
         for α in 1:Nw
 
@@ -160,8 +160,8 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
             mult *= Nw⁻¹*Gnp
             n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
             # O = @view Obs_Buffers_arr[:,α,n_m_wrapped]
-            LoopVectorization.@turbo for i in axes(Obs_numerator,1)
-                Obs_numerator[i,m_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
+            LoopVectorization.@turbo for i in axes(Obs_numerators,1)
+                Obs_numerators[i,m_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
             end
         end
     end
