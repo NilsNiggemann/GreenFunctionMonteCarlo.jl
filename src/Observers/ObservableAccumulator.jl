@@ -135,8 +135,6 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
     getPopulationMatrix!(PopulationMatrix,reconfigurationTable,n,m_max)
     Nw = length(eachindex(Walkers))
     Obs_Buffers_arr = parent(Obs_Buffers)
-
-    Nw⁻¹ = 1/Nw
     m_values = 0:m_max
     
     bin_index = get_bin_index(n,Observables.BasicAcc)
@@ -151,17 +149,17 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
         Gnp = Gnps[n,1+2m]
         Gnp == 0 && continue
         # @info "" n m Gnp
-        Obs_denominators[m_index] += Gnp
-        # Obs_denominator[m_index] += Gnp*Nw
+        Obs_denominators[m_index,bin_index] += Gnp
+        # Obs_denominators[m_index] += Gnp*Nw
+        n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
+        m_index_wrapped = mod1(m_index,lastindex(PopulationMatrix_parent,2))
         for α in 1:Nw
-
-            mult = PopulationMatrix[α,m_index]
+            mult = PopulationMatrix_parent[α,m_index_wrapped]
             mult == 0 && continue
             mult *= Nw⁻¹*Gnp
-            n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
             # O = @view Obs_Buffers_arr[:,α,n_m_wrapped]
             LoopVectorization.@turbo for i in axes(Obs_numerators,1)
-                Obs_numerators[i,m_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
+                Obs_numerators[i,m_index,bin_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
             end
         end
     end
