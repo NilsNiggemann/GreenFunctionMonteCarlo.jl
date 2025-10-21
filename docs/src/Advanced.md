@@ -72,6 +72,7 @@ If we call the function with `bunching = 8`, the following will happen:
 
 ## Saving simulation parameters
 To store parameters of the simulation, such as model parameters, number of walkers, time step, etc., GreenFunctionMonteCarlo.jl provides a function `save_params_dict`, which saves a dictionary of key-value pairs to an HDF5 file. This can be useful for keeping track of the simulation settings alongside the results.
+Nested dicts are also supported and will be stored as HDF5 groups.
 ```@example julia
 using GreenFunctionMonteCarlo
 using GreenFunctionMonteCarlo.HDF5
@@ -83,7 +84,7 @@ params = Dict(
     "configs" => zeros(Int8,3,2),
 )
 outfile = tempname()
-save_params_dict(outfile, params, mode="w")
+save_params_dict(outfile, Dict("params" => params), mode="w")
 h5open(outfile, "r") do f
     println(read(f))
 end
