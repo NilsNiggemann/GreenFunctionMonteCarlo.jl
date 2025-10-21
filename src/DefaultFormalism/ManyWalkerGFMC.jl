@@ -25,7 +25,6 @@ function getLocalEnergy(x::AbstractConfig,H::AbstractSignFreeOperator,logψ::Abs
     weights = zeros(length(H.moves))
     Hxx = get_diagonal(H)
     get_markov_weights!(weights,x,H,logψ,Hilbert,Buffer)
-    # println(weights)
     return getLocalEnergy(x,weights,Hxx)
 end
 

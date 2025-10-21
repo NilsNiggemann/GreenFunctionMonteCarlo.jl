@@ -129,6 +129,7 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
     (;Obs_numerators,Obs_denominators,Obs_Buffers) = Observables
     (;PopulationMatrix,Gnps,reconfigurationTable) = Observables.BasicAcc
     
+    nThreads = length(Observables.ObsFunc_buffer)
     compute_ObsAccumBuffers!(Observables,n,Walkers)    
     m_max = projection_order(Observables)
 
@@ -144,22 +145,26 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
     Base.@boundscheck checkbounds(Obs_numerators,:,:,bin_index)
     PopulationMatrix_parent = parent(PopulationMatrix)
     Nw⁻¹ = 1/Nw
-    Threads.@threads for m_index in axes(Obs_numerators,2)
-        m = m_values[m_index]
-        Gnp = Gnps[n,1+2m]
-        Gnp == 0 && continue
-        # @info "" n m Gnp
-        Obs_denominators[m_index,bin_index] += Gnp
-        # Obs_denominators[m_index] += Gnp*Nw
-        n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
-        m_index_wrapped = mod1(m_index,lastindex(PopulationMatrix_parent,2))
-        for α in 1:Nw
-            mult = PopulationMatrix_parent[α,m_index_wrapped]
-            mult == 0 && continue
-            mult *= Nw⁻¹*Gnp
-            # O = @view Obs_Buffers_arr[:,α,n_m_wrapped]
-            LoopVectorization.@turbo for i in axes(Obs_numerators,1)
-                Obs_numerators[i,m_index,bin_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
+
+    batches = ChunkSplitters.chunks(axes(Obs_numerators,2), n = nThreads,split = ChunkSplitters.RoundRobin())
+
+    @sync for m_batch in batches
+        Threads.@spawn begin
+            for m_index in m_batch
+                m = m_values[m_index]
+                Gnp = Gnps[n,1+2m]
+                Gnp == 0 && continue
+                Obs_denominators[m_index,bin_index] += Gnp
+                n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
+                m_index_wrapped = mod1(m_index,lastindex(PopulationMatrix_parent,2))
+                for α in 1:Nw
+                    mult = PopulationMatrix_parent[α,m_index_wrapped]
+                    mult == 0 && continue
+                    mult *= Nw⁻¹*Gnp
+                    LoopVectorization.@turbo for i in axes(Obs_numerators,1)
+                        Obs_numerators[i,m_index,bin_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
+                    end
+                end
             end
         end
     end
