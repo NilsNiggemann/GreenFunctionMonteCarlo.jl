@@ -5,7 +5,8 @@ function precomputeNormalizedAccWeight(weights::AbstractVector,PMax;normalize=tr
     Gnp = zeros(length(bn),PMax)
 
     for n in axes(Gnp,1)
-        Gnp[n,1] = 1 #zero projection order
+        Gnp[n,1] = !iszero(bn[n]) #zero projection order
+        # Gnp[n,1] = 1 #zero projection order
         PMax < 2 && continue
         Gnp[n,2] = bn[n]/meanweight # first projection order
     end

@@ -28,12 +28,15 @@ function getObs_diagonal(Gnps::AbstractMatrix,AllConfigs::AbstractArray{T,3},rec
             Gnp == 0 && continue
 
             denom_m[m_index] += Gnp
-            @views for α in 1:Nw
+
+            num_m_i = num_m[m_index]
+            for α in 1:Nw
                 mult = PopulationMatrix[α,m_index]
                 mult == 0 && continue
                 mult *= Nw⁻¹
                 O = obsBuffer(α,n-m)
-                @. num_m[m_index] += O*Gnp*mult
+                Gnpmult = Gnp*mult
+                LoopVectorization.@turbo num_m_i .+= O.*Gnpmult
             end
         end
     end
@@ -54,8 +57,9 @@ end
 function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMatrix,n,projectionLength)
     nMax = size(reconfigurationTable,2)
     PopulationMatrixParent = parent(PopulationMatrix)
-    fill!(PopulationMatrixParent,0)
+    # fill!(PopulationMatrixParent,0)
     for i_m in 0:min(n-1,projectionLength)
+        PopulationMatrixParent[:,i_m+1] .= 0
         for α in axes(reconfigurationTable,1)
             if i_m == 0
                 pop = 1
@@ -64,7 +68,7 @@ function getPopulationMatrix!(PopulationMatrix,reconfigurationTable::AbstractMat
             end
             pop == 0 && continue
             α´ = reconfigurationTable[α,n-i_m]
-
+            α´ == 0 && continue
             PopulationMatrixParent[α´,i_m+1] += pop
         end
     end

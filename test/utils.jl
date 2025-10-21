@@ -4,6 +4,27 @@ using GreenFunctionMonteCarlo
 import GreenFunctionMonteCarlo as GFMC
 import GreenFunctionMonteCarlo.SmallCollections as SC
 
+σz(n::Bool) = (1 - 2 * n)
+σz(i, conf::AbstractArray) = σz(conf[i])
+
+struct Hxx_TFI <: GFMC.DiagonalOperator
+    J::Float64
+end
+(H::Hxx_TFI)(x::AbstractVector) = H.J* (sum(σz(i,x) * σz(i+1,x) for i in eachindex(x)[1:end-1]) - σz(x[begin]) * σz(x[end]))
+
+function getMinimalExample(Nsites,h,J)
+    Hilbert = BosonHilbertSpace(Nsites, HardCoreConstraint())
+
+    moves = eachcol(GFMC.LinearAlgebra.I(Nsites))
+    offdiag = -h .* ones(length(moves))
+
+    diag_interaction = Hxx_TFI(J)
+
+    H = localOperator(moves, offdiag, diag_interaction, Hilbert)
+    
+    return (; Hilbert, H)
+end
+
 get_move_type(::HardCoreConstraint) = Bool
 get_move_type(C::OccupationNumberConstraint) = Int8
 
