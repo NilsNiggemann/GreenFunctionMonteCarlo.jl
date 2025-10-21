@@ -120,4 +120,6 @@ module GreenFunctionMonteCarlo
 
     include("CorrelationAnalysis/BinningAnalysis.jl")
     
+    include("IO.jl")
+    export save_params_dict
 end # module

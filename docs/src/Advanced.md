@@ -2,7 +2,8 @@
 ## Accumulators
 For long- running simulations with many walkers, the amount of data generated can be substantial. The `ConfigSaver`, introduced in [Transverse Field Ising Model Example](Example_transverseFieldIsing.md), must store the configurations of *each* walker at *each* observation step, which can lead to high memory consumption. Typically, one is ultimately interested in the expectation values of a handful of observables, which may also be obtained by accumulating data on-the-fly during the simulation.
 GreenFunctionMonteCarlo.jl provides a [`BasicAccumulator`](@ref) which stores the energy and some additional data required for other accumulators, as well as an  [`ObservableAccumulator`](@ref) which can be used to accumulate arbitrary observables defined as subtypes of `AbstractObservable`.
- In summary, the advantages of accumulators are:
+
+In summary, the advantages of accumulators are:
 - **Reduced Storage Usage**
 The drawbacks are:
 - **Limited Post-Processing Flexibility**: The observables cannot be obtained from post-processing. The maximum projection time needs to be defined before the simulation.
@@ -69,3 +70,22 @@ If we call the function with `bunching = 8`, the following will happen:
 !!! warning
     To estimate error bars, you must ensure that the bins are sufficiently decorrelated. This typically requires long simulations.
 
+## Saving simulation parameters
+To store parameters of the simulation, such as model parameters, number of walkers, time step, etc., GreenFunctionMonteCarlo.jl provides a function `save_params_dict`, which saves a dictionary of key-value pairs to an HDF5 file. This can be useful for keeping track of the simulation settings alongside the results.
+Nested dicts are also supported and will be stored as HDF5 groups.
+```@example julia
+using GreenFunctionMonteCarlo
+using GreenFunctionMonteCarlo.HDF5
+params = Dict(
+    "mProj" => 5,
+    "misc" => Dict(:a => 1, :b => 2.0, :c => "test"), 
+    "NSteps_total" => 55,
+    "mean_TotalWeights" => 55.,
+    "configs" => zeros(Int8,3,2),
+)
+outfile = tempname()
+save_params_dict(outfile, Dict("params" => params), mode="w")
+h5open(outfile, "r") do f
+    println(read(f))
+end
+```
