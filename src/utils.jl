@@ -21,3 +21,5 @@ function readMMapArray(filename::AbstractString,datasetname::String)
 end
 
 strd(x,args...;kwargs...) = string(round(x,args...;digits = 3,kwargs...))
+
+

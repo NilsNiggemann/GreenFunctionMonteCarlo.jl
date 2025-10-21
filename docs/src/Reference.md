@@ -58,4 +58,5 @@ GreenFunctionMonteCarlo.pre_move_affect!
 GreenFunctionMonteCarlo.propagateWalkers!
 GreenFunctionMonteCarlo.reconfigurateWalkers!
 GreenFunctionMonteCarlo.runGFMC!
+GreenFunctionMonteCarlo.save_params_dict
 ```
