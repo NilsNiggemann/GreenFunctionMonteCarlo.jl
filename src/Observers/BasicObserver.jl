@@ -12,7 +12,12 @@ struct BasicObserver{T} <: AbstractObserver
     TotalWeights::Vector{T}
     reconfigurationTable::Matrix{Int}
 end
-
+""" 
+    function BasicObserver(filename,NSteps::Integer,NWalkers::Integer)
+Creates a BasicObserver, storing energies, weights and reconfigurations. Creates a file under filename to store the data.
+If no filename (or nothing) is provided, store the data in memory.
+WARNING: Deleting a file that is being memory-mapped by a BasicObserver or any other observer will result in a crash when the observer is written to!
+"""
 function BasicObserver(filename,NSteps::Integer,NWalkers::Integer)
     energies = maybe_MMap_array(filename,"energies",Float64,(NSteps,))
     TotalWeights = maybe_MMap_array(filename,"TotalWeights",Float64,(NSteps,))
