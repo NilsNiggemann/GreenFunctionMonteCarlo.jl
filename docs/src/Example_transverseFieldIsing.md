@@ -63,6 +63,8 @@ The Hamiltonian is split into a diagonal and an offdiagonal part. The diagonal $
 ## Running the Simulation
 
 We now proceed to solve the Hamiltonian. It is instructive to consider a single walker first. As a guiding wavefunction, we use the simplest one, an equal weight superposition of all configurations $\psi(x) =1$.
+!!! note
+    Observers store simulation data. You can also initialize an Observer by passing a file name, i.e. `ConfigObserver(filename,startConfig, NSteps, NWalkers)` which will store everything in the file in HDF5 format by using memory mapping. Note that if this file is deleted when the Observer is used (i.e. in the simulation), julia will crash.
 
 ```@example TFI
 NSteps = 500  # Number of Monte Carlo steps
