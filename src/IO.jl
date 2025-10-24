@@ -50,7 +50,7 @@ Save a dictionary to an HDF5 file.
 - `data`: The dictionary to save
 - `mode`: The mode to open the file in ("w" = write/overwrite, "a" = append)
 """
-function save_params_dict(filename::AbstractString, data; mode::AbstractString="w")
+function save_params_dict(filename::AbstractString, data; mode::AbstractString="cw")
     HDF5.h5open(filename, mode) do file
         save_params_dict(file, nothing,data)
     end
