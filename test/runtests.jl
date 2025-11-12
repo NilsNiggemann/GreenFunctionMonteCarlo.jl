@@ -135,7 +135,7 @@ end
     , -[0.5, 0.3, 0.2 ,0.4], ZeroDiagOperator(), Hilbert)
     
     NumWalkers = 8
-    ensemble = GFMC.allocate_walkerEnsemble(config,logψ,NumWalkers,H)
+    ensemble = GFMC.allocate_walkerEnsemble(config,logψ,NumWalkers,H, GFMC.MultiThreaded(4))
     @testset "FlipMoves" begin
         move = H.moves[1]
         @test move === GFMC.FlipMove(SC.SmallVector{2,Int}((2,3)))
@@ -380,5 +380,6 @@ end
 
 include("Jastrow_tests.jl")
 include("parTemp_test.jl")
+include("Kernel_tests.jl")
 @run_package_tests verbose=true
 

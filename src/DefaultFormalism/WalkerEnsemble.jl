@@ -15,7 +15,7 @@ getBuffer(X::WalkerEnsemble, α) = X.Buffers[α]
 getReconfigurationList(X::WalkerEnsemble) = X.reconfigurationList
 getLocalEnergies(X::WalkerEnsemble) = X.local_energies
 
-function allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::Integer,numMoves::Integer)
+function allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::Integer,numMoves::Integer,parallelization::AbstractParallelizationScheme)
     configs = [copy(conf) for _ in 1:NWalkers]
     weights = zeros(NWalkers)
     move_weights = [zeros(numMoves) for _ in 1:NWalkers]
@@ -24,4 +24,4 @@ function allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::
     local_energies = zeros(Float64, NWalkers)
     return WalkerEnsemble(configs, weights, move_weights, buffers, reconfigurationList, local_energies)
 end
-allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::Integer,H::AbstractSignFreeOperator) = allocate_walkerEnsemble(conf, logψ, NWalkers, length(get_offdiagonal_elements(H)))
+allocate_walkerEnsemble(conf, logψ::AbstractGuidingFunction,NWalkers::Integer,H::AbstractSignFreeOperator,parallelization::AbstractParallelizationScheme) = allocate_walkerEnsemble(conf, logψ, NWalkers, length(get_offdiagonal_elements(H)), parallelization)

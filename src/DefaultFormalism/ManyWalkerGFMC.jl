@@ -128,7 +128,7 @@ struct GFMCProblem{WE<:AbstractWalkerEnsemble,Prop<:AbstractPropagator,GF<:Abstr
 end
 
 function GFMCProblem(config::AbstractConfig,NWalkers::Integer,prop::AbstractPropagator,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,logψ::AbstractGuidingFunction;parallelization = MultiThreaded(num_tasks_default(NWalkers)),reconfiguration = MinimalReconfiguration(NWalkers))
-    WE = allocate_walkerEnsemble(config,logψ,NWalkers,H)
+    WE = allocate_walkerEnsemble(config,logψ,NWalkers,H, parallelization)
 
     moves_vals = get_offdiagonal_elements(H)
     

@@ -121,5 +121,7 @@ module GreenFunctionMonteCarlo
     include("CorrelationAnalysis/BinningAnalysis.jl")
     
     include("IO.jl")
+
+    include("KernelParallelization/Kernels.jl")
     export save_params_dict
 end # module

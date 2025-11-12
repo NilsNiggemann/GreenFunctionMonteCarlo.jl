@@ -7,3 +7,14 @@ end
 guidingfunc_name(F::NaiveFunction) = "Naive($(F.logpsi))"
 get_params(ψG::NaiveFunction) = get_params(ψG.logpsi)
 allocate_GWF_buffer(logψ::NaiveFunction,conf) = NotImplementedBuffer()
+
+struct ParametrizedFunction{T,T2}
+    logpsi::T
+    params::T2
+end
+(N::ParametrizedFunction)(x::Any) = N.logpsi(x,N.params)
+
+guidingfunc_name(F::ParametrizedFunction) = "Parametrized($(F.logpsi), $(F.params))"
+get_params(ψG::ParametrizedFunction) = ψG.params
+
+allocate_GWF_buffer(logψ::ParametrizedFunction,conf) = NotImplementedBuffer()

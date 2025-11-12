@@ -10,10 +10,18 @@ This type is a subtype of `AbstractArray{T,N}`.
 # Interface
 - `Base.parent(x::AbstractConfig)`: return the parent array
 - `Base.copy(x::AbstractConfig)`: create a full copy of the configuration
-- `apply!(x::AbstractConfig, move::Any)`: apply a move to the configuration
+- `apply!(x::AbstractConfig, move::Any)`: apply a move to the configuration x
 - `fulfills_constraints(x::AbstractConfig, HilbertSpace::AbstractHilbertSpace)`: check if the configuration satisfies the constraints of the Hilbert space
+# Optional Interface
+- `apply!(x_prime::AbstractConfig,x::AbstractConfig, move::Any)`: apply a move to the configuration x and store the result in x_prime. 
 """
 abstract type AbstractConfig{T,N} <: AbstractArray{T,N} end
+function apply!(x::AbstractConfig,move) end
+function apply!(x_prime::AbstractConfig,x::AbstractConfig,move)
+    copy!(x_prime, x)
+    apply!(x_prime, move)
+    return nothing
+end
 
 """
     AbstractMove
