@@ -1,6 +1,7 @@
-struct KernelParallelization <: AbstractParallelizationScheme
-    MemoryType::UnionAll
+struct KernelParallelization{MemoryType} <: AbstractParallelizationScheme
 end
+KernelParallelization(::Type{T}) where {T<:AbstractArray} = KernelParallelization{T}()
+getMemoryType(par::KernelParallelization{T}) where T = T
 
 struct MatrixMoveOperator{MatType,VecType,DiagType} <: AbstractSignFreeOperator
     moves::MatType
@@ -24,13 +25,13 @@ struct WaveFunctionValues{T,Arr1<:AbstractArray{T,1},Arr2<:AbstractArray{T,2}}
     psi_m_alpha::Arr2
 end
 
-struct ArrayWalkerEnsemble{T,ConfMat<:AbstractMatrix{T},ConnConfType<:AbstractArray{T,3},WeightMatType<:AbstractMatrix,BuffType<:WaveFunctionValues} <: AbstractWalkerEnsemble
+struct ArrayWalkerEnsemble{T,ConfMat<:AbstractMatrix{T},ConnConfType<:AbstractArray{T,3},VecType<:AbstractVector,WeightMatType<:AbstractMatrix,BuffType<:WaveFunctionValues} <: AbstractWalkerEnsemble
     Configs::ConfMat
     ConnConfigs::ConnConfType
-    WalkerWeights::Vector{Float64}
+    WalkerWeights::VecType
     MoveWeights::WeightMatType
     reconfigurationList::Vector{Int}
-    local_energies::Vector{Float64}
+    local_energies::VecType
     GWFBuffers::BuffType
 end
 Base.eachindex(X::ArrayWalkerEnsemble) = eachindex(X.WalkerWeights)
@@ -55,7 +56,7 @@ function get_return_example(logψ::ParametrizedFunction, conf::AbstractVector)
 end
 
 function allocate_walkerEnsemble(conf::AbstractVector{T}, logψ::ParametrizedFunction,NWalkers::Integer,numMoves::Integer,parallelization::KernelParallelization) where {T}
-    MemoryType = parallelization.MemoryType
+    MemoryType = getMemoryType(parallelization)
     # parentConf = parent(conf)
     conf_converted = MemoryType{T}(parent(conf))
     Nsites = length(conf)
@@ -63,12 +64,12 @@ function allocate_walkerEnsemble(conf::AbstractVector{T}, logψ::ParametrizedFun
     set_to_config!(configs, conf_converted)
     conn_configs = MemoryType{T}(undef, Nsites, numMoves, NWalkers) .= 0
 
-    weights = zeros(NWalkers)
+    weights = MemoryType{Float64}(undef,NWalkers) .= 0
     move_weights = MemoryType{Float64}(undef,numMoves, NWalkers) .= 0
     # reconfigurationList = MemoryType{Int}(NWalkers)
     reconfigurationList = zeros(Int, NWalkers)
     # local_energies = MemoryType{Float64}(undef,NWalkers) .= 0
-    local_energies = zeros(NWalkers)
+    local_energies =  MemoryType{Float64}(undef,NWalkers) .= 0
 
     psi_return_type = typeof(get_return_example(logψ, conf_converted))
 
@@ -159,70 +160,103 @@ function get_markov_weights!(WE::ArrayWalkerEnsemble,H::MatrixMoveOperator,logψ
     return _get_markov_weights!(WE.MoveWeights, psi_x, psi_m_alpha, H, Hilbert)
 end
 
-function _get_e_local_alpha!(e_local_alpha,Hxx_alpha,moveWeights)
+function e_local_alpha!(e_local_alpha,Hxx_alpha,moveWeights)
     # Nwalkers = size(moveWeights, 2)
-    e_local_alpha .= Hxx_alpha
-    for α in eachindex(e_local_alpha)
-        e_local_alpha[α] += getLocalEnergy(view(moveWeights, :, α))
-    end
-    # AK.foraxes(e_local) do alpha
-    #     e_local[alpha] = Hxx_alpha[alpha] + getLocalEnergy(view(moveWeights, :, alpha))
+    # e_local_alpha .= Hxx_alpha
+    # for α in eachindex(e_local_alpha)
+    #     e_local_alpha[α] += getLocalEnergy(view(moveWeights, :, α))
     # end
+    AK.foraxes(e_local_alpha) do alpha
+        e_local_alpha[alpha] = Hxx_alpha[alpha] + getLocalEnergy(view(moveWeights, :, alpha))
+    end
     return e_local_alpha
 end
 
+function get_move_idxs(moveWeights::Matrix,rng::Random.AbstractRNG)
+    moveidxs = StatsBase.sample.(Ref(rng),StatsBase.Weights.(eachcol(moveWeights)))
+    return moveidxs
+end
+
+function get_move_idxs(moveWeights::AbstractMatrix,rng::Random.AbstractRNG)
+    # needed for now as StatsBase.sample does not work with GPU arrays
+    Mat_reshape = reshape(moveWeights,:)
+    Mat_matrix = Matrix(moveWeights)
+    
+    move_idxs = get_move_idxs(Mat_matrix,rng)
+    ref_array = similar(moveWeights,Int, 0)
+
+    Adapt.adapt(typeof(ref_array), move_idxs)
+end
+
+# function performMarkovSteps!(Configs::AbstractMatrix,ConnectedConfs::AbstractArray{T,3},moveWeights::AbstractMatrix,walker_still_running,rng::Random.AbstractRNG) where {T}
+#     # AK.@allowscalar moveidxs = StatsBase.sample.(Ref(rng),StatsBase.Weights.(eachcol(moveWeights)))
+    
+#     moveidxs = get_move_idxs(moveWeights,rng)
+#     for α in eachindex(moveidxs)
+#         if walker_still_running[α]
+#             move = moveidxs[α]
+#             Configs[:, α] .= view(ConnectedConfs, :, move, α)
+#         end
+#     end
+#     return nothing
+# end
+function performMarkovSteps!(Configs::AbstractMatrix,ConnectedConfs::AbstractArray{T,3},moveWeights::AbstractMatrix,walker_still_running,rng::Random.AbstractRNG) where {T}
+    moveidxs = get_move_idxs(moveWeights, rng)
+
+    AK.foraxes(Configs,2) do α
+        if walker_still_running[α]
+            move = moveidxs[α]
+            Configs[:, α] .= view(ConnectedConfs,:, move, α)
+        end
+    end
+    return nothing
+end
+
 function continuos_time_propagation!(WE::ArrayWalkerEnsemble, H::AbstractSignFreeOperator, logψ, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::KernelParallelization, RNG::Random.AbstractRNG = Random.default_rng())
+
+    MemoryType = getMemoryType(parallelization)
+
     Configs = getConfigs(WE)
     ConnConfigs = getOffdiag!(WE, H.moves)
     
-    psi_x = map_function!(similar(Configs), Configs, logψ, nothing)
-
     moveWeights = getMoveWeights(WE)
     Nwalkers = size(Configs, 2)
     # getMoveWeights!(moveWeights, WE, H, params)
-    logw_alpha = zeros(Nwalkers)
-    Hxx_alpha = zeros(Nwalkers)
-    el_alpha = zeros(Nwalkers)
+    logw_alpha =  MemoryType{Float64}(undef, Nwalkers) .= 0.0
+    Hxx_alpha = MemoryType{Float64}(undef, Nwalkers) .= 0.0
+    τ_step =  MemoryType{Float64}(undef, Nwalkers) .= 0.0
+    τleft = MemoryType{Float64}(undef, Nwalkers) .= dτ
+    ξ_alpha =  MemoryType{Float64}(undef, Nwalkers) .= 0.0
+    el_alpha =  MemoryType{Float64}(undef, Nwalkers) .= 0.0
+    walker_still_running =  MemoryType{Bool}(undef, Nwalkers) .= true
     Hxx = get_diagonal(H)
     map_function!(Hxx_alpha, Configs, Hxx)
 
     get_markov_weights!(WE, H, logψ, Hilbert)
-    for α in eachindex(WE)
-        logw_alpha[α] = 0.0
-        el_alpha[α] = Hxx_alpha[α] + getLocalEnergy(view(moveWeights, :, α))
-    end
+    e_local_alpha!(el_alpha, Hxx_alpha, moveWeights)
 
-    for α in eachindex(WE)
-        log_w = 0.0
-        get_markov_weights!(moveWeights, Config, H, logψ, Hilbert, GWFBuffer)
-        Hxx = get_diagonal(H)
-        H_xx = Hxx(Config)
-        el_x = H_xx + getLocalEnergy(moveWeights)
-        τleft = dτ
-        while τleft > 0
-            ξ = rand(RNG)
-            τ_step = min(τleft, log(1 - ξ) / (el_x - H_xx))
-            τleft -= τ_step
-            if isinf(τleft)
-                @info "" τ_step el_x H_xx τleft maximum(moveWeights)
-                error("Infinite propagation time encountered. Check for too large values in guiding wavefunction or its Buffers!")
-            end
-            log_w += -τ_step * el_x
-            if τleft > 0 
-                last_move = performMarkovStep!(Config, moveWeights, H, RNG)
-                post_move_affect!(GWFBuffer, Config, last_move, logψ)
-                get_markov_weights!(moveWeights, Config, H, logψ, Hilbert, GWFBuffer)
+    while any(walker_still_running)
+        Random.rand!(RNG, ξ_alpha)
+        @. τ_step = min(τleft, log(1 - ξ_alpha) ./ (el_alpha - Hxx_alpha))
+        @. τleft -= τ_step
+        @. walker_still_running = τleft > 0
 
-                H_xx = Hxx(Config)
-                el_x = H_xx + getLocalEnergy(moveWeights)
-            end
+        if any(isinf,τleft)
+            # @info "" τ_step el_alpha Hxx_alpha τleft maximum(moveWeights)
+            error("Infinite propagation time encountered. Check for too large values in guiding wavefunction or its Buffers!")
         end
-        w = exp(log_w - dτ * w_avg_estimate)
-        WalkerWeights = getWalkerWeights(WE)
-        WalkerWeights[α] = w
-        localEnergies = getLocalEnergies(WE)
-        localEnergies[α] = el_x
+        @. logw_alpha += -τ_step * el_alpha
+        performMarkovSteps!(Configs, ConnConfigs, moveWeights, walker_still_running, RNG)
+        get_markov_weights!(WE, H, logψ, Hilbert)
+        map_function!(Hxx_alpha, Configs, Hxx)
+        e_local_alpha!(el_alpha, Hxx_alpha, moveWeights)
     end
-    return nothing
+
+    WalkerWeights = getWalkerWeights(WE) 
+    localEnergies = getLocalEnergies(WE)
+    @. WalkerWeights = exp(logw_alpha - dτ * w_avg_estimate)
+    @. localEnergies = el_alpha
+
+    return localEnergies
 end
 
