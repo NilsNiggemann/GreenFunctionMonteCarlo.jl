@@ -18,3 +18,4 @@ guidingfunc_name(F::ParametrizedFunction) = "Parametrized($(F.logpsi), $(F.param
 get_params(ψG::ParametrizedFunction) = ψG.params
 
 allocate_GWF_buffer(logψ::ParametrizedFunction,conf) = NotImplementedBuffer()
+Adapt.adapt_structure(to, x::ParametrizedFunction) = ParametrizedFunction(Adapt.adapt(to, x.logpsi), Adapt.adapt(to, x.params))

@@ -1,13 +1,17 @@
 struct KernelParallelization <: AbstractParallelizationScheme
     MemoryType::UnionAll
 end
-import AcceleratedKernels as AK
 
-
-struct MatrixMoveOperator{MoveType,T,DiagType} <: AbstractSignFreeOperator
-    moves::Matrix{MoveType}
-    off_diag::Vector{T}
+struct MatrixMoveOperator{MatType,VecType,DiagType} <: AbstractSignFreeOperator
+    moves::MatType
+    off_diag::VecType
     diag::DiagType
+end
+function Adapt.adapt_structure(to, x::MatrixMoveOperator)
+    diag = Adapt.adapt(to, x.diag)
+    off_diag = Adapt.adapt(to, x.off_diag)
+    moves = Adapt.adapt(to, x.moves)
+    return MatrixMoveOperator(moves, off_diag, diag)
 end
 
 @inline get_move(O::MatrixMoveOperator, idx::Integer) = @view O.moves[:,idx]
@@ -29,7 +33,7 @@ struct ArrayWalkerEnsemble{T,ConfMat<:AbstractMatrix{T},ConnConfType<:AbstractAr
     local_energies::Vector{Float64}
     GWFBuffers::BuffType
 end
-
+Base.eachindex(X::ArrayWalkerEnsemble) = eachindex(X.WalkerWeights)
 getConfig(X::ArrayWalkerEnsemble, α) = @view X.Configs[:, α]
 getConfigs(X::ArrayWalkerEnsemble) = X.Configs
 getMoveWeights(X::ArrayWalkerEnsemble, α) = @view X.MoveWeights[:, α]
@@ -39,16 +43,24 @@ getBuffer(X::ArrayWalkerEnsemble) = X.GWFBuffers
 getReconfigurationList(X::ArrayWalkerEnsemble) = X.reconfigurationList
 getLocalEnergies(X::ArrayWalkerEnsemble) = X.local_energies
 
+function set_to_config!(Configs, conf::AbstractVector{T}) where {T}
+    AK.foraxes(Configs,2) do α
+        Configs[:, α] .= conf
+    end
+    return Configs
+end
+
+function get_return_example(logψ::ParametrizedFunction, conf::AbstractVector)
+    return AK.@allowscalar logψ(conf)
+end
+
 function allocate_walkerEnsemble(conf::AbstractVector{T}, logψ::ParametrizedFunction,NWalkers::Integer,numMoves::Integer,parallelization::KernelParallelization) where {T}
     MemoryType = parallelization.MemoryType
     # parentConf = parent(conf)
-
+    conf_converted = MemoryType{T}(parent(conf))
     Nsites = length(conf)
     configs = MemoryType{T}(undef, Nsites, NWalkers)
-    AK.foraxes(configs,2) do α
-        @. configs[:, α] = conf
-    end
-
+    set_to_config!(configs, conf_converted)
     conn_configs = MemoryType{T}(undef, Nsites, numMoves, NWalkers) .= 0
 
     weights = zeros(NWalkers)
@@ -58,10 +70,11 @@ function allocate_walkerEnsemble(conf::AbstractVector{T}, logψ::ParametrizedFun
     # local_energies = MemoryType{Float64}(undef,NWalkers) .= 0
     local_energies = zeros(NWalkers)
 
-    psi_return = logψ(conf)
+    psi_return_type = typeof(get_return_example(logψ, conf_converted))
 
-    psi_x_alpha = MemoryType{typeof(psi_return)}(undef, NWalkers) .= 0
-    psi_m_alpha = MemoryType{typeof(psi_return)}(undef, numMoves, NWalkers) .= 0
+    isconcretetype(psi_return_type) || @warn ("Wavefunction return type is not a concrete type: $psi_return_type")
+    psi_x_alpha = MemoryType{psi_return_type}(undef, NWalkers) .= 0
+    psi_m_alpha = MemoryType{psi_return_type}(undef, numMoves, NWalkers) .= 0
     Buffers = WaveFunctionValues(psi_x_alpha, psi_m_alpha)
 
     return ArrayWalkerEnsemble(configs, conn_configs, weights, move_weights, reconfigurationList, local_energies, Buffers)
@@ -146,6 +159,18 @@ function get_markov_weights!(WE::ArrayWalkerEnsemble,H::MatrixMoveOperator,logψ
     return _get_markov_weights!(WE.MoveWeights, psi_x, psi_m_alpha, H, Hilbert)
 end
 
+function _get_e_local_alpha!(e_local_alpha,Hxx_alpha,moveWeights)
+    # Nwalkers = size(moveWeights, 2)
+    e_local_alpha .= Hxx_alpha
+    for α in eachindex(e_local_alpha)
+        e_local_alpha[α] += getLocalEnergy(view(moveWeights, :, α))
+    end
+    # AK.foraxes(e_local) do alpha
+    #     e_local[alpha] = Hxx_alpha[alpha] + getLocalEnergy(view(moveWeights, :, alpha))
+    # end
+    return e_local_alpha
+end
+
 function continuos_time_propagation!(WE::ArrayWalkerEnsemble, H::AbstractSignFreeOperator, logψ, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::KernelParallelization, RNG::Random.AbstractRNG = Random.default_rng())
     Configs = getConfigs(WE)
     ConnConfigs = getOffdiag!(WE, H.moves)
@@ -155,13 +180,17 @@ function continuos_time_propagation!(WE::ArrayWalkerEnsemble, H::AbstractSignFre
     moveWeights = getMoveWeights(WE)
     Nwalkers = size(Configs, 2)
     # getMoveWeights!(moveWeights, WE, H, params)
-    log_w = zeros(Nwalkers)
-    H_xx = zeros(Nwalkers)
-    
+    logw_alpha = zeros(Nwalkers)
+    Hxx_alpha = zeros(Nwalkers)
+    el_alpha = zeros(Nwalkers)
     Hxx = get_diagonal(H)
-    map_function!(H_xx, Configs, Hxx)
+    map_function!(Hxx_alpha, Configs, Hxx)
 
     get_markov_weights!(WE, H, logψ, Hilbert)
+    for α in eachindex(WE)
+        logw_alpha[α] = 0.0
+        el_alpha[α] = Hxx_alpha[α] + getLocalEnergy(view(moveWeights, :, α))
+    end
 
     for α in eachindex(WE)
         log_w = 0.0

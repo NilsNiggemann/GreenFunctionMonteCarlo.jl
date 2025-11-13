@@ -41,6 +41,9 @@ module GreenFunctionMonteCarlo
     import LoopVectorization
     import ProgressMeter
     import CircularArrays
+    import AcceleratedKernels as AK
+    import Adapt
+
     include("utils.jl")
     export createMMapArray, readMMapArray
 
