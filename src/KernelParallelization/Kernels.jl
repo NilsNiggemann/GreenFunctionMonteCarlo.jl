@@ -15,7 +15,15 @@ function Adapt.adapt_structure(to, x::MatrixMoveOperator)
     return MatrixMoveOperator(moves, off_diag, diag)
 end
 
-@inline get_move(O::MatrixMoveOperator, idx::Integer) = @view O.moves[:,idx]
+struct ArrayMove{T,Vectype<:AbstractVector{T}} <: AbstractMove
+    move::Vectype
+end
+affected_sites(M::ArrayMove) = findall(!iszero, M.move)
+apply!(x, M::ArrayMove) = (x .+= M.move)
+apply!(x, M::ArrayMove{Bool}) = map!(xor, x, M.move)
+move_dx(move::ArrayMove) = move.move
+
+@inline get_move(O::MatrixMoveOperator, idx::Integer) = ArrayMove(@view O.moves[:,idx])
 @inline get_diagonal(O::MatrixMoveOperator) = O.diag
 @inline get_offdiagonal_elements(O::MatrixMoveOperator) = O.off_diag
 
@@ -41,6 +49,7 @@ getMoveWeights(X::ArrayWalkerEnsemble, α) = @view X.MoveWeights[:, α]
 getMoveWeights(X::ArrayWalkerEnsemble) = X.MoveWeights
 getWalkerWeights(X::ArrayWalkerEnsemble) = X.WalkerWeights
 getBuffer(X::ArrayWalkerEnsemble) = X.GWFBuffers
+getBuffer(X::ArrayWalkerEnsemble,α) = NotImplementedBuffer()
 getReconfigurationList(X::ArrayWalkerEnsemble) = X.reconfigurationList
 getLocalEnergies(X::ArrayWalkerEnsemble) = X.local_energies
 
@@ -64,12 +73,14 @@ function allocate_walkerEnsemble(conf::AbstractVector{T}, logψ::ParametrizedFun
     set_to_config!(configs, conf_converted)
     conn_configs = MemoryType{T}(undef, Nsites, numMoves, NWalkers) .= 0
 
-    weights = MemoryType{Float64}(undef,NWalkers) .= 0
+    # weights = MemoryType{Float64}(undef,NWalkers) .= 0
+    weights = zeros(NWalkers)
     move_weights = MemoryType{Float64}(undef,numMoves, NWalkers) .= 0
     # reconfigurationList = MemoryType{Int}(NWalkers)
     reconfigurationList = zeros(Int, NWalkers)
     # local_energies = MemoryType{Float64}(undef,NWalkers) .= 0
-    local_energies =  MemoryType{Float64}(undef,NWalkers) .= 0
+    # local_energies =  MemoryType{Float64}(undef,NWalkers) .= 0
+    local_energies =  zeros(NWalkers)
 
     psi_return_type = typeof(get_return_example(logψ, conf_converted))
 
@@ -185,7 +196,14 @@ function get_move_idxs(moveWeights::AbstractMatrix,rng::Random.AbstractRNG)
     move_idxs = get_move_idxs(Mat_matrix,rng)
     ref_array = similar(moveWeights,Int, 0)
 
-    Adapt.adapt(typeof(ref_array), move_idxs)
+    Adapt.adapt(AK.get_backend(moveWeights), move_idxs)
+end
+
+function TEST_get_move_idxs(moveIdxs,moveWeights::AbstractMatrix,rng::Random.AbstractRNG)
+    # needed for now as StatsBase.sample does not work with GPU arrays
+    # Random.rand!(1:100,moveIdxs)
+    moveIdxs .= 8
+    return moveIdxs
 end
 
 # function performMarkovSteps!(Configs::AbstractMatrix,ConnectedConfs::AbstractArray{T,3},moveWeights::AbstractMatrix,walker_still_running,rng::Random.AbstractRNG) where {T}
@@ -211,8 +229,81 @@ function performMarkovSteps!(Configs::AbstractMatrix,ConnectedConfs::AbstractArr
     end
     return nothing
 end
+function TESTperformMarkovSteps!(moveidxs,Configs::AbstractMatrix,ConnectedConfs::AbstractArray{T,3},moveWeights::AbstractMatrix,walker_still_running,rng::Random.AbstractRNG) where {T}
+    moveidxs = TEST_get_move_idxs(moveidxs,moveWeights, rng)
 
-function continuos_time_propagation!(WE::ArrayWalkerEnsemble, H::AbstractSignFreeOperator, logψ, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::KernelParallelization, RNG::Random.AbstractRNG = Random.default_rng())
+    # for α in axes(Configs,2)
+    AK.foraxes(Configs,2) do α
+        if walker_still_running[α]
+            move = moveidxs[α]
+            Configs[:, α] .= view(ConnectedConfs,:, move, α)
+        end
+    end
+    return nothing
+end
+function _test_contTime(WE,H,logψ,Hilbert,parallelization)
+    return continuos_time_propagation!(WE, H, logψ, Hilbert, 0.1, 0., parallelization)
+end
+
+function step_times!(τ_step, τleft, ξ_alpha, el_alpha, Hxx_alpha, logw_alpha,walker_still_running)
+    @. τ_step = min(τleft, log(1 - ξ_alpha) ./ (el_alpha - Hxx_alpha))
+    @. τleft -= τ_step
+    @. walker_still_running = τleft > 0
+    @. logw_alpha += -τ_step * el_alpha
+end
+
+function step_times_kernel!(τ_step, τleft, ξ_alpha, el_alpha, Hxx_alpha, logw_alpha,walker_still_running)
+    @inbounds AK.foreachindex(τ_step) do alpha
+        if walker_still_running[alpha]
+            τ_step[alpha] = min(τleft[alpha], log(1 - ξ_alpha[alpha]) / (el_alpha[alpha] - Hxx_alpha[alpha]))
+            τleft[alpha] -= τ_step[alpha]
+            walker_still_running[alpha] = τleft[alpha] > 0
+            logw_alpha[alpha] += -τ_step[alpha] * el_alpha[alpha]
+        end
+    end
+end
+
+function continuos_time_propagation_walker!(WE::ArrayWalkerEnsemble, α::Int, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real,RNG::Random.AbstractRNG)
+
+    Configs = getConfigs(WE)
+    moveWeights = getMoveWeights(WE)
+    
+    AK.foreachindex(Configs,2) do α
+        log_w = 0.0
+        get_markov_weights!(moveWeights, Config, H, logψ, Hilbert, GWFBuffer)
+        Hxx = get_diagonal(H)
+        H_xx = Hxx(Config)
+        el_x = H_xx + getLocalEnergy(moveWeights)
+        τleft = dτ
+        while τleft > 0
+            ξ = rand(RNG)
+            τ_step = min(τleft, log(1 - ξ) / (el_x - H_xx))
+            τleft -= τ_step
+            if isinf(τleft)
+                @info "" τ_step el_x H_xx τleft maximum(moveWeights)
+                error("Infinite propagat
+                ion time encountered. Check for too large values in guiding wavefunction or its Buffers!")
+            end
+            log_w += -τ_step * el_x
+            if τleft > 0 
+                last_move = performMarkovStep!(Config, moveWeights, H, RNG)
+                post_move_affect!(GWFBuffer, Config, last_move, logψ)
+                get_markov_weights!(moveWeights, Config, H, logψ, Hilbert, GWFBuffer)
+
+                H_xx = Hxx(Config)
+                el_x = H_xx + getLocalEnergy(moveWeights)
+            end
+        end
+        w = exp(log_w - dτ * w_avg_estimate)
+        WalkerWeights = getWalkerWeights(WE)
+        WalkerWeights[α] = w
+        localEnergies = getLocalEnergies(WE)
+        localEnergies[α] = el_x
+    end
+    return nothing
+end
+
+function _continuos_time_propagation!(WE::ArrayWalkerEnsemble, H::AbstractSignFreeOperator, logψ, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::KernelParallelization, RNG::Random.AbstractRNG = Random.default_rng())
 
     MemoryType = getMemoryType(parallelization)
 
@@ -229,34 +320,74 @@ function continuos_time_propagation!(WE::ArrayWalkerEnsemble, H::AbstractSignFre
     ξ_alpha =  MemoryType{Float64}(undef, Nwalkers) .= 0.0
     el_alpha =  MemoryType{Float64}(undef, Nwalkers) .= 0.0
     walker_still_running =  MemoryType{Bool}(undef, Nwalkers) .= true
+    moveIdxs = MemoryType{Int}(undef, Nwalkers)
+    # walker_still_running_cpu =  ones(Bool, Nwalkers)
+    Num_running_walkers = Nwalkers
+
     Hxx = get_diagonal(H)
     map_function!(Hxx_alpha, Configs, Hxx)
 
     get_markov_weights!(WE, H, logψ, Hilbert)
     e_local_alpha!(el_alpha, Hxx_alpha, moveWeights)
 
-    while any(walker_still_running)
+    i = 0
+    a1 = 0.
+    a2 = 0.
+    a3 = 0.
+    a4 = 0.
+    # while i < 24
+    while AK.any(identity,walker_still_running)
+    # while any(walker_still_running)
+        i += 1
         Random.rand!(RNG, ξ_alpha)
-        @. τ_step = min(τleft, log(1 - ξ_alpha) ./ (el_alpha - Hxx_alpha))
-        @. τleft -= τ_step
-        @. walker_still_running = τleft > 0
-
-        if any(isinf,τleft)
-            # @info "" τ_step el_alpha Hxx_alpha τleft maximum(moveWeights)
-            error("Infinite propagation time encountered. Check for too large values in guiding wavefunction or its Buffers!")
+        a1 += @elapsed step_times_kernel!(τ_step, τleft, ξ_alpha, el_alpha, Hxx_alpha, logw_alpha, walker_still_running)
+        # copyto!(walker_still_running_cpu, walker_still_running)
+        # if any(isinf,τleft)
+        #     # @info "" τ_step el_alpha Hxx_alpha τleft maximum(moveWeights)
+        #     error("Infinite propagation time encountered. Check for too large values in guiding wavefunction or its Buffers!")
+        # end
+        # if !all(walker_still_running)
+        #     Num_running_walkers = count(identity, walker_still_running)
+        #     @info "Number of still running walkers: $Num_running_walkers"
+        # end
+        # performMarkovSteps!(Configs, ConnConfigs, moveWeights, walker_still_running, RNG)
+        a2 += @elapsed TESTperformMarkovSteps!(moveIdxs,Configs, ConnConfigs, moveWeights, walker_still_running, RNG)
+        a3 += @elapsed get_markov_weights!(WE, H, logψ, Hilbert)
+        a4 += @elapsed begin 
+            map_function!(Hxx_alpha, Configs, Hxx)
+            e_local_alpha!(el_alpha, Hxx_alpha, moveWeights)
         end
-        @. logw_alpha += -τ_step * el_alpha
-        performMarkovSteps!(Configs, ConnConfigs, moveWeights, walker_still_running, RNG)
-        get_markov_weights!(WE, H, logψ, Hilbert)
-        map_function!(Hxx_alpha, Configs, Hxx)
-        e_local_alpha!(el_alpha, Hxx_alpha, moveWeights)
     end
-
-    WalkerWeights = getWalkerWeights(WE) 
+    print(i,", ", a1*1000,", ", a2*1000,", ", a3*1000,", ", a4*1000,"\n")
+    # @info "" i 
+    WalkerWeights = getWalkerWeights(WE)
     localEnergies = getLocalEnergies(WE)
-    @. WalkerWeights = exp(logw_alpha - dτ * w_avg_estimate)
-    @. localEnergies = el_alpha
+    # copyto!(WalkerWeights, exp.(logw_alpha .- dτ * w_avg_estimate))
+    # copyto!(localEnergies, el_alpha)
+    # @. WalkerWeights = exp(logw_alpha - dτ * w_avg_estimate)
+    # @. localEnergies = el_alpha
 
     return localEnergies
 end
 
+
+function reconfigurateWalkers!(Walkers::ArrayWalkerEnsemble, reconfiguration::MinimalReconfiguration, rng::Random.AbstractRNG)
+    reconfigurationList = reconfiguration.reconfigurationList
+    reconfiguration_buffer = reconfiguration.reconfigurationBuffer
+
+    Nw = NWalkers(Walkers)
+    WalkerWeights = getWalkerWeights(Walkers)
+    cumsum!(reconfiguration_buffer, WalkerWeights)
+    wTotal = sum(WalkerWeights)
+    @. reconfiguration_buffer /= wTotal
+
+    for α in eachindex(Walkers)
+        ξα = rand(rng)
+        zα = (α + ξα - 1) / Nw
+        α′ = searchsortedfirst(reconfiguration_buffer, zα)
+        reconfigurationList[α] = α′
+    end
+    minimizeReconfiguration!(reconfigurationList)
+
+    return nothing
+end

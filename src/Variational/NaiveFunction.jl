@@ -8,7 +8,7 @@ guidingfunc_name(F::NaiveFunction) = "Naive($(F.logpsi))"
 get_params(ψG::NaiveFunction) = get_params(ψG.logpsi)
 allocate_GWF_buffer(logψ::NaiveFunction,conf) = NotImplementedBuffer()
 
-struct ParametrizedFunction{T,T2}
+struct ParametrizedFunction{T,T2} <: AbstractGuidingFunction
     logpsi::T
     params::T2
 end
