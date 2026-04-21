@@ -1,8 +1,9 @@
 struct MinimalReconfiguration <: AbstractReconfigurationScheme 
     reconfigurationList::Vector{Int}
     reconfigurationBuffer::Vector{Float64}
+    inverseBuffer::Vector{Int}
 end
-MinimalReconfiguration(Nw::Int) = MinimalReconfiguration(zeros(Int,Nw),zeros(Nw))
+MinimalReconfiguration(Nw::Int) = MinimalReconfiguration(zeros(Int,Nw),zeros(Nw),zeros(Int,Nw))
 get_reconfigurationList(reconf::MinimalReconfiguration) = reconf.reconfigurationList
 
 """Performs an efficient reconfiguration of walkers. This reconfiguration will not remove walkers if they all have the same weight, which increases the efficiency as more walkers can contribute to the average.
@@ -30,7 +31,7 @@ function reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,reconfiguration::
         α´ = searchsortedfirst(reconfiguration_buffer,zα)
         reconfigurationList[α] = α´
     end
-    minimizeReconfiguration!(reconfigurationList)
+    minimizeReconfiguration!(reconfigurationList, reconfiguration.inverseBuffer)
     for (α,α´) in enumerate(reconfigurationList)
         if α´ != α
             getConfig(Walkers,α) .= getConfig(Walkers,α´)
@@ -43,31 +44,52 @@ function reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,reconfiguration::
 end
 
 """
-    minimizeReconfiguration!(list)
+    minimizeReconfiguration!(list, inverse)
 
 
 given a list of reconfiguration indices, minimizes the number of reconfigurations by swapping elements in the list. Each walker that survives a reconfiguration step remains unchanged while walkers that are killed get assigned to a new index.
 
+`inverse` is a pre-allocated scratch buffer of the same length as `list`.  It
+is overwritten during the call and its contents after the call are undefined.
+Passing a pre-allocated buffer avoids the heap allocation that would otherwise
+occur on every call.
+
 # Arguments
 - `list`: A collection (e.g., an array) that will be reconfigured in-place.
+- `inverse`: A pre-allocated integer scratch buffer of the same length as `list`.
 """
-function minimizeReconfiguration!(list)
+function minimizeReconfiguration!(list, inverse::AbstractVector{<:Integer})
     N = length(list)
-    index_map = Dict(α′ => α for (α, α′) in enumerate(list))
-
-    for α in 1:N
+    # Clear the buffer so untargeted positions remain 0
+    fill!(inverse, 0)
+    # Build inverse permutation: inverse[α′] = α  ⟺  list[α] = α′
+    @inbounds for α in 1:N
+        inverse[list[α]] = α
+    end
+    @inbounds for α in 1:N
         α′ = list[α]
         α′ == α && continue
 
-        otherIndex = get(index_map, α, 0)
+        otherIndex = inverse[α]
         iszero(otherIndex) && continue
 
         list[α], list[otherIndex] = list[otherIndex], list[α]
 
-        index_map[list[otherIndex]] = otherIndex
-        index_map[list[α]] = α
+        inverse[list[otherIndex]] = otherIndex
+        inverse[list[α]] = α
     end
     return list
+end
+
+"""
+    minimizeReconfiguration!(list)
+
+Convenience single-argument overload that allocates a temporary inverse buffer.
+Prefer the two-argument form `minimizeReconfiguration!(list, inverse)` in
+performance-critical code to avoid heap allocation.
+"""
+function minimizeReconfiguration!(list)
+    return minimizeReconfiguration!(list, zeros(Int, length(list)))
 end
 
 function swapIndices!(list,i,j)
