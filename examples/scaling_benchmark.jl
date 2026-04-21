@@ -51,7 +51,7 @@ function build_problem(N, NWalkers; parallelization = MultiThreaded(Threads.nthr
     Hxx = DiagOperator(x -> sum(σz(x[i]) * σz(x[i+1]) for i in 1:N-1))
     H   = localOperator(moves, offdiag, Hxx, Hilbert)
 
-    # trivial (flat) guiding function → no Jastrow buffer cost
+    # trivial (flat) guiding function -> no Jastrow buffer cost
     logψ = EqualWeightSuperposition()
 
     config = BosonConfig(Hilbert)

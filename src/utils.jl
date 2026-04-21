@@ -39,6 +39,10 @@ accumulate into significant GC pressure and hurt multi-threaded scaling.
     @inbounds for w in weights
         total += w
     end
+    # In normal GFMC operation all move weights are strictly positive, so
+    # `total` is always > 0.  If it were zero every index would be equally
+    # likely; the loop below would return lastindex(weights), which is a
+    # safe fallback consistent with the original StatsBase behaviour.
     u = rand(rng) * total
     cumulative = zero(eltype(weights))
     @inbounds for i in eachindex(weights)
