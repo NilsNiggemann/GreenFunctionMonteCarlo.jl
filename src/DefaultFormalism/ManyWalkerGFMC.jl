@@ -47,7 +47,7 @@ function getLocalEnergyWalkers_before(Walkers::AbstractWalkerEnsemble,Hxx::Diago
 end
 
 function performMarkovStep!(x::AbstractConfig,moveWeights::AbstractVector,H::AbstractSignFreeOperator,rng::Random.AbstractRNG)
-    moveidx = StatsBase.sample(rng,StatsBase.Weights(moveWeights))
+    moveidx = sample_fast(rng,moveWeights)
     move = get_move(H,moveidx)
     apply!(x,move)
     return move

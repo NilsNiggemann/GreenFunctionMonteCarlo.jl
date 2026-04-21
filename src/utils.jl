@@ -22,4 +22,30 @@ end
 
 strd(x,args...;kwargs...) = string(round(x,args...;digits = 3,kwargs...))
 
+"""
+    sample_fast(rng, weights) -> Int
+
+Allocation-free categorical sampling. Returns an index sampled proportionally
+to `weights`. Functionally equivalent to
+`StatsBase.sample(rng, StatsBase.Weights(weights))` but avoids heap-allocating
+a `Weights` wrapper object on every call.
+
+This matters especially inside the innermost Monte Carlo loop
+(`performMarkovStep!`) where the per-call allocation would otherwise
+accumulate into significant GC pressure and hurt multi-threaded scaling.
+"""
+@inline function sample_fast(rng::Random.AbstractRNG, weights::AbstractVector)
+    total = zero(eltype(weights))
+    @inbounds for w in weights
+        total += w
+    end
+    u = rand(rng) * total
+    cumulative = zero(eltype(weights))
+    @inbounds for i in eachindex(weights)
+        cumulative += weights[i]
+        u <= cumulative && return i
+    end
+    return lastindex(weights)  # fallback for floating-point rounding
+end
+
 
