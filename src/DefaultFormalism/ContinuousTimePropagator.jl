@@ -19,6 +19,31 @@ struct ContinuousTimePropagator{T<:AbstractFloat} <: AbstractPropagator
     dτ::T
     w_avg_estimate::T
 end
+
+struct InfinitePropagationTimeError <: Exception
+    walker_index::Int
+    τ_step::Float64
+    el_x::Float64
+    H_xx::Float64
+    τleft::Float64
+    max_move_weight::Float64
+end
+
+# InfinitePropagationTimeError(walker_index, τ_step, el_x, H_xx, τleft, max_move_weight) = InfinitePropagationTimeError(walker_index, Float64(τ_step), Float64(el_x), Float64(H_xx), Float64(τleft), Float64(max_move_weight))
+
+function Base.showerror(io::IO, err::InfinitePropagationTimeError)
+    print(io,
+        "Infinite propagation time encountered for walker ", err.walker_index,
+        ". Check guiding wavefunction/buffers. ",
+        "(τ_step=", err.τ_step,
+        ", el_x=", err.el_x,
+        ", H_xx=", err.H_xx,
+        ", τleft=", err.τleft,
+        ", max_move_weight=", err.max_move_weight,
+        ")"
+    )
+end
+
 ContinuousTimePropagator(dτ::Real,w_avg_estimate::Real) = ContinuousTimePropagator(float(dτ),float(w_avg_estimate))
 ContinuousTimePropagator(dτ::Real;w_avg_estimate=0.) = ContinuousTimePropagator(dτ,w_avg_estimate)
 
@@ -49,6 +74,19 @@ function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSign
         end
     end
 end
+
+function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::BatchMultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
+    
+    batches = parallelization.batches
+
+    Polyester.@batch  for i_chunk in eachindex(batches)
+        αinds = batches[i_chunk]
+        for α in αinds
+            continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, RNG)
+        end
+    end
+end
+
 function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::SingleThreaded, RNG::Random.AbstractRNG = Random.default_rng())
     for α in eachindex(WE)
         continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, RNG)
@@ -70,8 +108,7 @@ function continuos_time_propagation_walker!(WE::AbstractWalkerEnsemble, α::Int,
         τ_step = min(τleft, log(1 - ξ) / (el_x - H_xx))
         τleft -= τ_step
         if isinf(τleft)
-            @info "" τ_step el_x H_xx τleft maximum(moveWeights)
-            error("Infinite propagation time encountered. Check for too large values in guiding wavefunction or its Buffers!")
+            throw(InfinitePropagationTimeError(α,τ_step,el_x,H_xx,τleft,maximum(moveWeights)))
         end
         log_w += -τ_step * el_x
         if τleft > 0 

@@ -38,6 +38,7 @@ module GreenFunctionMonteCarlo
     import HDF5
     import Statistics
     import LinearAlgebra
+    import Polyester
     import LoopVectorization
     import ProgressMeter
     import CircularArrays
@@ -52,7 +53,7 @@ module GreenFunctionMonteCarlo
 
     export propagateWalkers!, fulfills_constraint, InverseMove, apply!, get_params
 
-    export SingleThreaded, MultiThreaded
+    export SingleThreaded, MultiThreaded, BatchMultiThreaded
 
     include("Observers/BasicObserver.jl")
     include("Observers/CombinedObserver.jl")

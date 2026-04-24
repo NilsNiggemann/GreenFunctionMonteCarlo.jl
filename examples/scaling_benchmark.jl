@@ -60,7 +60,7 @@ import Printf: @printf
 # Using HardCoreConstraint (spin-1/2 = bosons with occupancy 0 or 1).
 # ---------------------------------------------------------------------------
 
-const N_SITES   = 16          # small enough that buffers fit comfortably in L1
+const N_SITES   = 300          # small enough that buffers fit comfortably in L1
 const N_WALKERS = Threads.nthreads() * 200   # >> nthreads -> good load balance
 const N_WARMUP  = 50          # steps to discard (equilibration)
 const N_BENCH   = 200         # steps to time
@@ -75,11 +75,25 @@ function build_problem(N, NWalkers; parallelization = MultiThreaded(Threads.nthr
     offdiag = -ones(N)                         # -h, h = 1
 
     # diagonal: Ising interaction J = 1
-    Hxx = DiagOperator(x -> sum(σz(x[i]) * σz(x[i+1]) for i in 1:N-1))
+    function Hxx_func(config)
+        sum(σz(config[i]) * σz(config[i+1]) for i in eachindex(config)[1:end-1])
+    end
+    function Hxx_func(config,E0,lastmove)
+        j = lastmove.inds[1]
+        # Only sites i-1 and i can change energy, so we can compute the difference from the old energy
+        ΔE = 0
+
+        s(i) = 1 <= i <= length(config) ? σz(config[i]) : 0
+        ΔE -= 2 * s(j)* (s(j-1) + s(j+1))
+        return ΔE + E0
+    end
+    Hxx = DiagOperator(Hxx_func)
+    # Hxx = DiagOperator(x -> 0.)
     H   = localOperator(moves, offdiag, Hxx, Hilbert)
 
     # trivial (flat) guiding function -> no Jastrow buffer cost
-    logψ = EqualWeightSuperposition()
+    logψ = (Jastrow(zeros(Float32, N), zeros(Float32, N,N)))   # logψ = exp(Σ h_i n_i) with h_i = 0
+    # logψ = EqualWeightSuperposition()
 
     config = BosonConfig(Hilbert)
 
@@ -116,90 +130,92 @@ function main()
     println()
 
     # Warmup run (JIT compilation + equilibration)
-    print("Warming up (compiling + equilibrating)... ")
+    println("Warming up (compiling + equilibrating)…")
     prob_warmup = build_problem(N_SITES, N_WALKERS)
     runGFMC!(prob_warmup, NoObserver(), N_WARMUP; logger = nothing)
-    println("done.\n")
+    println("Done.\n")
 
     # Baseline: single-threaded
-    print("Benchmarking SingleThreaded... ")
-    prob_st = build_problem(N_SITES, N_WALKERS; parallelization = SingleThreaded())
+    println("Benchmarking SingleThreaded…")
+    prob_st = build_problem(N_SITES, N_WALKERS, SingleThreaded())
     runGFMC!(prob_st, NoObserver(), N_WARMUP; logger = nothing)  # equilibrate
     t_single = bench_run(prob_st)
-    @printf("%.3f s\n\n", t_single)
+    @printf("  SingleThreaded:  %.3f s\n\n", t_single)
 
     # Multi-threaded with increasing task counts
-    println("Benchmarking MultiThreaded...")
-    println("  tasks  time(s)  speedup  ideal  Amdahl_max")
-    println("  -----  -------  -------  -----  ----------")
+    println("Benchmarking MultiThreaded…")
+    println("  tasks tasks/threads  time(s)  speedup  s vs M(1)  ideal  efficiency")
+    println("  ----- -------------  -------  -------  ---------  -----  ----------")
 
-    t_1task = nothing
-    for ntasks in unique([1, 2, 4, 8, nthreads, 2nthreads, 4nthreads])
+    t_M1 = 0
+    # for ntasks in unique([1, nthreads])
+    for ntasks in sort!(unique([1,2,4,8,16, nthreads, 2nthreads,3nthreads,4nthreads, 8nthreads,32nthreads]))
         ntasks > 4 * N_WALKERS && continue   # nonsensical
-        prob_mt = build_problem(N_SITES, N_WALKERS;
-                                parallelization = MultiThreaded(ntasks))
+        prob_mt = build_problem(N_SITES, N_WALKERS, BatchMultiThreaded(ntasks,N_WALKERS))
         runGFMC!(prob_mt, NoObserver(), N_WARMUP; logger = nothing)
         t = bench_run(prob_mt)
-        speedup = t_single / t
-        ideal   = min(Float64(ntasks), Float64(nthreads))
         if ntasks == 1
-            t_1task = t
-            @printf("  %5d  %7.3f  %7.2fx  %4.1fx        ---\n", ntasks, t, speedup, ideal)
-        else
-            # Amdahl fit from 1-task and nthreads-task measurements:
-            # T(n) = t_par/n + t_seq
-            # t_seq = (n*T(n) - T(1)) / (n - 1)   (only meaningful at large n)
-            if ntasks <= nthreads && t_1task !== nothing
-                n = Float64(ntasks)
-                t_seq = (n * t - t_1task) / (n - 1)
-                t_seq = max(t_seq, 0.0)  # clamp numerical noise
-                S_max = t_1task / t_seq
-                @printf("  %5d  %7.3f  %7.2fx  %4.1fx   %6.2fx\n", ntasks, t, speedup, ideal, S_max)
-            else
-                @printf("  %5d  %7.3f  %7.2fx  %4.1fx        ---\n", ntasks, t, speedup, ideal)
-            end
+            t_M1 = t
         end
+        speedup = t_single / t
+
+        speedup_vs_M1 = t_M1 / t
+
+        ideal   = min(Float64(ntasks), Float64(nthreads))
+        efficiency = speedup / ideal * 100
+        @printf("  %5d %13.3f  %7.3f  %6.2fx %9.2fx  %4.1fx  %8.1f%%\n", ntasks,ntasks/nthreads, t, speedup, speedup_vs_M1, ideal, efficiency)
     end
 
-    if t_1task !== nothing && nthreads >= 2
-        # Estimate sequential fraction at n = nthreads
-        n  = Float64(nthreads)
-        # Use 1-task and nthreads-task timings for the best Amdahl estimate
-        prob_nt = build_problem(N_SITES, N_WALKERS;
-                                parallelization = MultiThreaded(nthreads))
-        runGFMC!(prob_nt, NoObserver(), N_WARMUP; logger = nothing)
-        t_nt = bench_run(prob_nt)
-        t_seq = (n * t_nt - t_1task) / (n - 1)
-        t_seq = max(t_seq, 0.0)
-        f_seq = t_seq / t_1task   # sequential fraction
-        S_max = 1 / f_seq
-
-        println()
-        @printf("Amdahl analysis (1 task vs %d tasks):\n", nthreads)
-        @printf("  Estimated sequential fraction : %.1f%%\n", 100 * f_seq)
-        @printf("  Theoretical max speedup       : %.2fx\n", S_max)
-        println()
-        println("The sequential fraction comes primarily from `reconfigurateWalkers!`.")
-        println("This step does global resampling and cannot be parallelised.")
-        println("The `minimizeReconfiguration!` helper has been optimised to use a")
-        println("pre-allocated inverse buffer (no Dict allocation per step),")
-        println("which reduces GC pressure that would otherwise stall all threads.")
-    end
-
-    println()
-    println("""
-Tips for better scaling
------------------------
-* Run with more threads: `julia --threads auto examples/scaling_benchmark.jl`
-* Increase N_WALKERS relative to nthreads for better load balancing.
-* Keep N_SITES small so per-walker buffers stay in CPU cache.
-* Use the default TaskLocalRNG (default_rng()) -- it has zero lock overhead
-  because each spawned task gets its own independent RNG state.
-* Avoid passing a shared non-task-local RNG (e.g. MersenneTwister) to the
-  parallel path: those objects require a lock and serialize all rand() calls.
-* Consider increasing dτ to reduce the average number of inner-loop Markov
-  steps per walker (fewer calls into performMarkovStep! per GFMC step).
-""")
 end
 
+# Printf is in stdlib; import it
+function ideal_scaling_2(N_res,N_iter,print=false)
+    res = zeros(N_res)
+    Threads.@threads for i in 1:N_res
+    # for i in 1:N_res
+        t = @elapsed begin
+            resi = 0.0
+            # for j in 1:N_iter
+            GreenFunctionMonteCarlo.LoopVectorization.@turbo for j in 1:N_iter
+                resi += sin(sqrt(Float64(j)))
+            end
+            res[i] = resi
+        end
+        print && println("Thread $(Threads.threadid()) is working on index $i: t = $(round(t, digits=3))s")
+    end
+    return res
+end
+pinnedcores = fast_core_cpuids()
+if isinteractive()
+    
+    pinnedcores = 16:27
+    # pinnedcores = 27:-1:16
+    # pinnedcores = 12:-1:0
+end
+println("Pinning threads to CPU cores: $(join(pinnedcores, ","))")
+# pinthreads(0:27; nthreads = Threads.nthreads(), threadpool = :all, force = true, warn = false)
+pinthreads(pinnedcores; nthreads = Threads.nthreads(), threadpool = :all, force = true, warn = false)
+##
 main()
+# benchmark_ideal_scaling()
+# pinthreads(:cores)
+##
+# threadinfo(color=true)
+# ideal_scaling_2(Threads.nthreads(), 1000)
+# @time ideal_scaling_2(Threads.nthreads(), 300000000,true)
+# benchmark_fast_core_scaling()
+# isinteractive() || exit()
+##
+nthreads = Threads.nthreads()
+ntasks = 1*nthreads
+# prob_mt = build_problem(N_SITES, N_WALKERS, MultiThreaded(ntasks))
+prob_mt = build_problem(N_SITES, N_WALKERS, BatchMultiThreaded(ntasks,N_WALKERS))
+# prob_mt = build_problem(N_SITES, N_WALKERS, Batch)
+runGFMC!(prob_mt, NoObserver(), N_WARMUP; logger = nothing)
+# @profview t = bench_run(prob_mt)
+@time runGFMC!(prob_mt, NoObserver(), 3N_BENCH; logger = nothing)
+@time runGFMC!(prob_mt, NoObserver(), 3N_BENCH; logger = nothing)
+# @time runGFMC!(prob_mt, NoObserver(), N_BENCH; logger = nothing)
+# display(@benchmark runGFMC!(prob_mt, NoObserver(), 3N_BENCH; logger = nothing))
+##
+@profview runGFMC!(prob_mt, NoObserver(), 3N_BENCH; logger = nothing)

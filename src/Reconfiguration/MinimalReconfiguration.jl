@@ -17,6 +17,7 @@ Phys. Rev. B 57, 11446 (1998)
 - `rng::Random.AbstractRNG`: The random number generator to be used.
 """
 function reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,reconfiguration::MinimalReconfiguration,rng::Random.AbstractRNG)
+    return
     reconfigurationList = reconfiguration.reconfigurationList
     reconfiguration_buffer = reconfiguration.reconfigurationBuffer
 
