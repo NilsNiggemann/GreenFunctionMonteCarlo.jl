@@ -30,15 +30,14 @@ function reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,reconfiguration::
         α´ = searchsortedfirst(reconfiguration_buffer,zα)
         reconfigurationList[α] = α´
     end
-    minimizeReconfiguration!(reconfigurationList)
-    for (α,α´) in enumerate(reconfigurationList)
-        if α´ != α
-            getConfig(Walkers,α) .= getConfig(Walkers,α´)
+    cloned_walkers, dead_walkers = minimizeReconfiguration(reconfigurationList)
+    # minimizeReconfiguration!(reconfigurationList)
+    for (α,α´) in zip(dead_walkers, cloned_walkers)
+        getConfig(Walkers,α) .= getConfig(Walkers,α´)
 
-            BuffA = getBuffer(Walkers,α)
-            BuffB = getBuffer(Walkers,α´)
-            setBuffer!(BuffA,BuffB)
-        end
+        BuffA = getBuffer(Walkers,α)
+        BuffB = getBuffer(Walkers,α´)
+        setBuffer!(BuffA,BuffB)
     end
 end
 
@@ -68,6 +67,25 @@ function minimizeReconfiguration!(list)
         index_map[list[α]] = α
     end
     return list
+end
+
+function minimizeReconfiguration(list)
+    N = length(list)
+
+    dead_walkers = Set(collect(1:N))
+    cloned_walkers = Int[]
+    sizehint!(cloned_walkers, N)
+    sizehint!(dead_walkers, N)
+    
+    for α′ in list
+        if α′ ∉ dead_walkers
+            push!(cloned_walkers, α′)
+        end
+        delete!(dead_walkers, α′)
+    end
+    sort!(cloned_walkers)
+    dead_walkers_list = sort!(collect(dead_walkers))
+    return cloned_walkers, dead_walkers_list
 end
 
 function swapIndices!(list,i,j)
