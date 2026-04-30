@@ -95,7 +95,7 @@ function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,
     for i in range
         propagateWalkers!(Walkers,H,logψ,Hilbert,propagator,parallelizer,RNG)
         saveObservables_before!(Observables,i,Walkers,H,reconfiguration)
-        reconfigurateWalkers!(Walkers,reconfiguration,RNG)
+        reconfigurateWalkers!(Walkers,reconfiguration,parallelizer,RNG)
         saveObservables_after!(Observables,i,Walkers,H,reconfiguration)
         write_log(logger,i,range,Walkers,Observables,reconfiguration)
     end

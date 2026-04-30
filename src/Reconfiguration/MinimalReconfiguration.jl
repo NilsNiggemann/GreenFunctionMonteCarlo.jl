@@ -28,36 +28,63 @@ Phys. Rev. B 57, 11446 (1998)
 - `reconfigurationList`: A list of indices that will be reconfigured.
 - `rng::Random.AbstractRNG`: The random number generator to be used.
 """
-function reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,reconfiguration::MinimalReconfiguration,rng::Random.AbstractRNG)
+function reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,reconfiguration::MinimalReconfiguration,parallelizer::AbstractParallelizationScheme,rng::Random.AbstractRNG)
     reconfigurationList = reconfiguration.reconfigurationList
     reconfiguration_buffer = reconfiguration.reconfigurationBuffer
-    Nw = NWalkers(Walkers)
+    Nw⁻¹ = 1. /NWalkers(Walkers)
     WalkerWeights = getWalkerWeights(Walkers)
     reconfiguration_buffer = cumsum!(reconfiguration_buffer,WalkerWeights) 
     wTotal = sum(WalkerWeights)
     reconfiguration_buffer ./= wTotal
-    Polyester.@batch for α in eachindex(Walkers)
-        ξα = rand(rng)
-        zα = (α + ξα - 1)/Nw
-        α´ = searchsortedfirst(reconfiguration_buffer,zα)
-        reconfigurationList[α] = α´
-    end
+
+    _make_reconfigurationList!(reconfigurationList,reconfiguration_buffer, Nw⁻¹, rng, parallelizer)
 
     (;cloned_walkers, dead_walkers,dead_walker_Set) = reconfiguration
 
     minimizeReconfiguration!(reconfigurationList, cloned_walkers, dead_walkers,dead_walker_Set)
 
+    _replace_walkers!(Walkers,cloned_walkers,dead_walkers,parallelizer)
+end
+function _replace_walker!(Walkers,α,α´)
+    getConfig(Walkers,α) .= getConfig(Walkers,α´)
+
+    BuffA = getBuffer(Walkers,α)
+    BuffB = getBuffer(Walkers,α´)
+    setBuffer!(BuffA,BuffB)
+end
+function _replace_walkers!(Walkers,cloned_walkers,dead_walkers,::AbstractParallelizationScheme)
+    for i in eachindex(cloned_walkers,dead_walkers)
+        α = dead_walkers[i]
+        α´ = cloned_walkers[i]
+        _replace_walker!(Walkers,α,α´)
+    end
+end
+function _replace_walkers!(Walkers,cloned_walkers,dead_walkers,::BatchMultiThreaded)
     Polyester.@batch for i in eachindex(cloned_walkers,dead_walkers)
         α = dead_walkers[i]
         α´ = cloned_walkers[i]
-        getConfig(Walkers,α) .= getConfig(Walkers,α´)
-
-        BuffA = getBuffer(Walkers,α)
-        BuffB = getBuffer(Walkers,α´)
-        setBuffer!(BuffA,BuffB)
+        _replace_walker!(Walkers,α,α´)
     end
 end
 
+function _make_reconfigurationList!(reconfigurationList,reconfiguration_buffer, Nw⁻¹, rng, ::AbstractParallelizationScheme)
+    for α in eachindex(reconfigurationList)
+        reconfigurationList[α] = _sample_reconf(reconfiguration_buffer,α, Nw⁻¹, rng)
+    end
+end
+
+function _make_reconfigurationList!(reconfigurationList,reconfiguration_buffer, Nw⁻¹, rng, ::BatchMultiThreaded)
+    Polyester.@batch for α in eachindex(reconfigurationList)
+        reconfigurationList[α] = _sample_reconf(reconfiguration_buffer,α, Nw⁻¹, rng)
+    end
+end
+
+function _sample_reconf(reconfiguration_buffer,α, Nw⁻¹, rng)
+    ξα = rand(rng)
+    zα = (α + ξα - 1)*Nw⁻¹    
+    α´ = searchsortedfirst(reconfiguration_buffer,zα)
+    return α´
+end
 """
     minimizeReconfiguration!(list)
 
@@ -69,7 +96,7 @@ given a list of reconfiguration indices, minimizes the number of reconfiguration
 """
 function minimizeReconfiguration!(list, cloned_walkers::Vector{Int}, dead_walkers::Vector{Int}, dead_walker_Set::Set{Int})
     N = length(list)
-
+    
     empty!(dead_walker_Set)
     empty!(dead_walkers)
     for i in 1:N
