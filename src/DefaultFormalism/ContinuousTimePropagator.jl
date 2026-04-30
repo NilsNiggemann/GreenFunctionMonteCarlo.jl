@@ -76,14 +76,11 @@ function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSign
 end
 
 function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::BatchMultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
-    
-    batches = parallelization.batches
-
-    Polyester.@batch  for i_chunk in eachindex(batches)
-        αinds = batches[i_chunk]
-        for α in αinds
-            continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, RNG)
-        end
+    αinds = eachindex(WE)
+    Nw = length(αinds)
+    minbatch = clamp(Nw ÷ parallelization.nTasks, 1, Nw)
+    Polyester.@batch minbatch=minbatch for α in αinds
+        continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, RNG)
     end
 end
 
@@ -111,7 +108,7 @@ function continuos_time_propagation_walker!(WE::AbstractWalkerEnsemble, α::Int,
             throw(InfinitePropagationTimeError(α,τ_step,el_x,H_xx,τleft,maximum(moveWeights)))
         end
         log_w += -τ_step * el_x
-        if τleft > 0 
+        if τleft > 0
             last_move = performMarkovStep!(Config, moveWeights, H, RNG)
             post_move_affect!(GWFBuffer, Config, last_move, logψ)
             get_markov_weights!(moveWeights, Config, H, logψ, Hilbert, GWFBuffer)

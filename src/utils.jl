@@ -35,16 +35,9 @@ This matters especially inside the innermost Monte Carlo loop
 accumulate into significant GC pressure and hurt multi-threaded scaling.
 """
 @inline function sample_fast(rng::Random.AbstractRNG, weights::AbstractVector)
-    total = zero(eltype(weights))
-    @inbounds for w in weights
-        total += w
-    end
-    # In normal GFMC operation all move weights are strictly positive, so
-    # `total` is always > 0.  If it were zero every index would be equally
-    # likely; the loop below would return lastindex(weights), which is a
-    # safe fallback consistent with the original StatsBase behaviour.
+    total = sum(weights)
     u = rand(rng) * total
-    cumulative = zero(eltype(weights))
+    cumulative = zero(total)
     @inbounds for i in eachindex(weights)
         cumulative += weights[i]
         u <= cumulative && return i
