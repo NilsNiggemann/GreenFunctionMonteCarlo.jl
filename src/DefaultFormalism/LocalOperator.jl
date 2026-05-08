@@ -119,7 +119,7 @@ end
 
 @inline isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::HardCoreConstraint) = true
 @inline isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::OccupationNumberConstraint) = true
-@inline isapplicable(x::AbstractConfig{<:Integer}, move::SparseMove, c::OccupationNumberConstraint) = _isapplicable_occnum(x, move, c.min_occ, c.max_occ)
+@inline isapplicable(x::AbstractConfig{<:Integer}, move::SparseMove, c::OccupationNumberConstraint) = _isapplicable_occnum(x, move, c.min_occupation, c.max_occupation)
 
 @inline function _isapplicable_occnum(x::AbstractConfig{<:Integer}, move::SparseMove, min_occ, max_occ)
     for (i,site) in enumerate(move.inds)
