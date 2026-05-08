@@ -117,19 +117,21 @@ end
 @inline get_diagonal(O::LocalOperator) = O.diag
 @inline get_offdiagonal_elements(O::LocalOperator) = O.off_diag
 
-isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::HardCoreConstraint) = true
-isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::OccupationNumberConstraint) = true
+@inline isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::HardCoreConstraint) = true
+@inline isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::OccupationNumberConstraint) = true
+@inline isapplicable(x::AbstractConfig{<:Integer}, move::SparseMove, c::OccupationNumberConstraint) = _isapplicable_occnum(x, move, c.min_occ, c.max_occ)
 
-function isapplicable(x::AbstractConfig{<:Integer}, move::SparseMove, c::OccupationNumberConstraint)
+@inline function _isapplicable_occnum(x::AbstractConfig{<:Integer}, move::SparseMove, min_occ, max_occ)
     for (i,site) in enumerate(move.inds)
-        if !(c.min_occupation <= x[site] + move.vals[i] <= c.max_occupation)
+        if !(min_occ <= x[site] + move.vals[i] <= max_occ)
             return false
         end
     end
     return true
 end
+@inline isapplicable(x::AbstractConfig, move::SparseMove, c::HardCoreConstraint) = _isapplicable_occnum(x, move, 0, 1)
 
-_move_type(::LocalOperator{MoveType}) where {MoveType} = MoveType
+@inline _move_type(::LocalOperator{MoveType}) where {MoveType} = MoveType
 
 function localOperator(moves::AbstractVector, off_diag::AbstractVector, diag, H::AbstractHilbertSpace)
     @assert length(moves) == length(off_diag) "Number of moves must match number of Off-diagonal elements"

@@ -124,4 +124,4 @@ function swapIndices!(list,i,j)
 end
 
 struct NoReconfiguration <: AbstractReconfigurationScheme end
-reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,::NoReconfiguration,rng) = nothing
+reconfigurateWalkers!(Walkers::AbstractWalkerEnsemble,::NoReconfiguration,parallelizer::AbstractParallelizationScheme,rng) = nothing
