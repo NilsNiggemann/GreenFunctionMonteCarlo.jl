@@ -113,8 +113,8 @@ Base.@propagate_inbounds function _kernel_compute_ObsAccumBuffers!(Obs_Buffers,c
     ObsFunc!(obs_val,conf)
     Obs_buff_arr = parent(Obs_Buffers)
     i_wrapped = mod1(i,lastindex(Obs_Buffers,3))
-    Base.@boundscheck checkbounds(Obs_buff_arr,:,α,i_wrapped)
-
+    Base.@boundscheck checkbounds(Obs_buff_arr,eachindex(obs_val),α,i_wrapped)
+    #  Obs_buff_arr[:,α,i_wrapped] .= obs_val
     LoopVectorization.@turbo Obs_buff_arr[:,α,i_wrapped] .= obs_val
 end
 
@@ -147,7 +147,7 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
     Nw⁻¹ = 1/Nw
 
     batches = ChunkSplitters.chunks(axes(Obs_numerators,2), n = nThreads,split = ChunkSplitters.RoundRobin())
-
+    # return
     @sync for m_batch in batches
         Threads.@spawn begin
             for m_index in m_batch
