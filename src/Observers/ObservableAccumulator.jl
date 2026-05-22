@@ -161,7 +161,7 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
                     mult = PopulationMatrix_parent[α,m_index_wrapped]
                     mult == 0 && continue
                     mult *= Nw⁻¹*Gnp
-                    LoopVectorization.@turbo for i in axes(Obs_numerators,1)
+                    LoopVectorization.@tturbo for i in axes(Obs_numerators,1)
                         Obs_numerators[i,m_index,bin_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
                     end
                 end
