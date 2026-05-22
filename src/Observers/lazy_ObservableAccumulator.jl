@@ -59,13 +59,15 @@ function LazyObservableAccumulator(filename,conf,Observable::AbstractObservable,
 
     @assert all(>=(0), mvals) "All m_values must be non-negative integers"
     m_proj = maximum(mvals)+1 # account for 0 projection 
-
-    @assert m_proj <= projection_order(BasicAcc) "Projection order m_proj must be less than the projection order of the BasicAccumulator"
+    num_proj = length(mvals)
+    @assert m_proj <= projection_order(BasicAcc) "Projection order m_proj=$(m_proj) must be less than the projection order of the BasicAccumulator =$(projection_order(BasicAcc))"
     Obs_Buffers = CircularArrays.CircularArray(zeros(eltype(conf),length(conf),NWalkers,m_proj))
     
-    Obs_numerators = maybe_MMap_array(filename,"$(Obs_Name)_numerator",Float64,(NumObs,m_proj,num_bins))
-    Obs_denominators = maybe_MMap_array(filename,"$(Obs_Name)_denominator",Float64,(m_proj,num_bins))
-    
+    Obs_numerators = maybe_MMap_array(filename,"$(Obs_Name)_numerator",Float64,(NumObs,num_proj,num_bins))
+    Obs_denominators = maybe_MMap_array(filename,"$(Obs_Name)_denominator",Float64,(num_proj,num_bins))
+
+    maybe_write_array(filename,"$(Obs_Name)_m_values",mvals)
+
     ObsAcc = LazyObservableAccumulator(BasicAcc,ObsFunc_buffer,Obs_Buffers,Obs_numerators,Obs_denominators,mvals)
     return ObsAcc
 end
@@ -104,21 +106,27 @@ function _compute_ObsAccumBuffers_multithreaded!(Observables::LazyObservableAccu
 
     batches = ChunkSplitters.chunks(eachindex(Walkers), n = length(ObsFunc_buffer),split = ChunkSplitters.RoundRobin())
 
-    @sync for (i_chunk, αinds) in enumerate(batches)
-        Threads.@spawn for α in αinds
-            conf = getConfig(Walkers,α)
-            _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i)
-        end
+    # @sync for (i_chunk, αinds) in enumerate(batches)
+    #     Threads.@spawn for α in αinds
+    #         conf = getConfig(Walkers,α)
+    #         _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i)
+    #     end
+    # end
+
+    Polyester.@batch for α in eachindex(Walkers)
+        conf = getConfig(Walkers,α)
+        _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i)
     end
     return
 end
 
-Base.@propagate_inbounds function _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i)
+@inline Base.@propagate_inbounds function _kernel_compute_ObsAccumBuffers!(Obs_Buffers,conf,α,i)
     Obs_buff_arr = parent(Obs_Buffers)
     i_wrapped = mod1(i,lastindex(Obs_Buffers,3))
     Base.@boundscheck checkbounds(Obs_buff_arr,:,α,i_wrapped)
 
-    LoopVectorization.@turbo Obs_buff_arr[:,α,i_wrapped] .= conf
+    Obs_buff_arr[:,α,i_wrapped] .= conf
+    # LoopVectorization.@turbo Obs_buff_arr[:,α,i_wrapped] .= conf
 end
 
 function saveObservables_after!(Observables::LazyObservableAccumulator,i,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
@@ -148,34 +156,85 @@ function Obs_Acc_projection!(Observables::LazyObservableAccumulator,n,Walkers::A
     Base.@boundscheck checkbounds(Obs_numerators,:,:,bin_index)
     PopulationMatrix_parent = parent(PopulationMatrix)
     Nw⁻¹ = 1/Nw
-    batches = ChunkSplitters.chunks(eachindex(m_values), n = nThreads,split = ChunkSplitters.RoundRobin())
+    # batches = ChunkSplitters.chunks(eachindex(m_values), n = nThreads,split = ChunkSplitters.RoundRobin())
     # error(collect.(batches))
-    @sync for (i_chunk, m_batch) in enumerate(batches)
-        
-        Threads.@spawn begin
-            ObsFunc! = Observables.ObsFunc_buffer[i_chunk]
-            obs_val = obs(ObsFunc!)
-            for m_index in m_batch
-                m = m_values[m_index]
-                Gnp = Gnps[n,1+2m]
-                Gnp == 0 && continue
-                Obs_denominators[m_index,bin_index] += Gnp
-                n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
-                m_index_wrapped = mod1(m_index,lastindex(PopulationMatrix_parent,2))
-                for α in 1:Nw
-                    mult = PopulationMatrix_parent[α,m_index_wrapped]
-                    mult == 0 && continue
-                    mult *= Nw⁻¹*Gnp
-                    @views ObsFunc!(obs_val, Obs_Buffers_arr[:,α,n_m_wrapped])
+    i_chunk = 1        
+    ObsFunc! = Observables.ObsFunc_buffer[i_chunk]
+    obs_val = obs(ObsFunc!)
 
-                    LoopVectorization.@tturbo for i in axes(Obs_numerators,1)
-                        Obs_numerators[i,m_index,bin_index] += obs_val[i]*mult
-                    end
-                end
+    Threads.@threads for m_index in eachindex(m_values)
+        m = m_values[m_index]
+        Gnp = Gnps[n,1+2m]
+        Gnp == 0 && continue
+        Obs_denominators[m_index,bin_index] += Gnp
+        n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
+        m_index_wrapped = mod1(m_index,lastindex(PopulationMatrix_parent,2))
+
+        Threads.@threads for i in axes(Obs_numerators,1)
+
+            Obs_num_i_m_b = zero(eltype(Obs_numerators))
+            
+            for α in 1:Nw
+                mult = PopulationMatrix_parent[α,m_index_wrapped]
+                mult == 0 && continue
+                mult *= Nw⁻¹*Gnp
+                x_am = @view Obs_Buffers_arr[:,α,n_m_wrapped]
+                Obs_num_i_m_b += ObsFunc!(x_am,i) *mult
             end
+            Obs_numerators[i,m_index,bin_index] += Obs_num_i_m_b
         end
     end
 end
+
+# function Obs_Acc_projection!(Observables::LazyObservableAccumulator,n,Walkers::AbstractWalkerEnsemble)
+
+#     (;Obs_numerators,Obs_denominators,Obs_Buffers) = Observables
+#     (;PopulationMatrix,Gnps,reconfigurationTable) = Observables.BasicAcc
+    
+#     nThreads = length(Observables.ObsFunc_buffer)
+#     compute_ObsAccumBuffers!(Observables,n,Walkers)    
+#     m_max = projection_order(Observables)
+
+#     getPopulationMatrix!(PopulationMatrix,reconfigurationTable,n,m_max)
+#     Nw = length(eachindex(Walkers))
+#     Obs_Buffers_arr = parent(Obs_Buffers)
+#     m_values = Observables.m_values
+    
+#     bin_index = get_bin_index(n,Observables.BasicAcc)
+
+#     Base.@boundscheck checkbounds(Obs_Buffers_arr,:,1:Nw,:)
+#     # Base.@boundscheck checkbounds(axes(Obs_numerators,2),m_values)
+#     Base.@boundscheck checkbounds(Obs_numerators,:,:,bin_index)
+#     PopulationMatrix_parent = parent(PopulationMatrix)
+#     Nw⁻¹ = 1/Nw
+#     batches = ChunkSplitters.chunks(eachindex(m_values), n = nThreads,split = ChunkSplitters.RoundRobin())
+#     # error(collect.(batches))
+#     @sync for (i_chunk, m_batch) in enumerate(batches)
+        
+#         Threads.@spawn begin
+#             ObsFunc! = Observables.ObsFunc_buffer[i_chunk]
+#             obs_val = obs(ObsFunc!)
+#             for m_index in m_batch
+#                 m = m_values[m_index]
+#                 Gnp = Gnps[n,1+2m]
+#                 Gnp == 0 && continue
+#                 Obs_denominators[m_index,bin_index] += Gnp
+#                 n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
+#                 m_index_wrapped = mod1(m_index,lastindex(PopulationMatrix_parent,2))
+#                 for α in 1:Nw
+#                     mult = PopulationMatrix_parent[α,m_index_wrapped]
+#                     mult == 0 && continue
+#                     mult *= Nw⁻¹*Gnp
+#                     @views ObsFunc!(obs_val, Obs_Buffers_arr[:,α,n_m_wrapped])
+
+#                     LoopVectorization.@tturbo for i in axes(Obs_numerators,1)
+#                         Obs_numerators[i,m_index,bin_index] += obs_val[i]*mult
+#                     end
+#                 end
+#             end
+#         end
+#     end
+# end
 
 # @views function get_obs_from_accumulator(Obs::Union{LazyObservableAccumulator,NamedTuple},bin_indices::AbstractVector)
 #     # Obs_num_slices = Obs.Obs_numerators[:,:,bin_indices]

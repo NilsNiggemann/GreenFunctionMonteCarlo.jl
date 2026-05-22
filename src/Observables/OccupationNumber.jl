@@ -12,3 +12,6 @@ end
     pConf = parent(config)
     O(out, pConf)
 end
+@inline function (O::OccupationNumber)(config::AbstractArray,i::Integer)
+    config[i]
+end

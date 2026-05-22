@@ -20,6 +20,12 @@ function readMMapArray(filename::AbstractString,datasetname::String)
     end
 end
 
+function maybe_write_array(filename::Nothing,datasetname::String,array)
+    return nothing
+end
+function maybe_write_array(filename::AbstractString,datasetname::String,array)
+    HDF5.h5write(filename,datasetname,array)
+end
 strd(x,args...;kwargs...) = string(round(x,args...;digits = 3,kwargs...))
 
 """
