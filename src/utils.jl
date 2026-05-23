@@ -28,7 +28,7 @@ function maybe_write_array(filename::AbstractString,datasetname::String,array)
 end
 strd(x,args...;kwargs...) = string(round(x,args...;digits = 3,kwargs...))
 
-"""
+#=
     sample_fast(rng, weights) -> Int
 
 Allocation-free categorical sampling. Returns an index sampled proportionally
@@ -39,7 +39,7 @@ a `Weights` wrapper object on every call.
 This matters especially inside the innermost Monte Carlo loop
 (`performMarkovStep!`) where the per-call allocation would otherwise
 accumulate into significant GC pressure and hurt multi-threaded scaling.
-"""
+=#
 @inline function sample_fast(rng::Random.AbstractRNG, weights::AbstractVector)
     total = sum(weights)
     u = rand(rng) * total
