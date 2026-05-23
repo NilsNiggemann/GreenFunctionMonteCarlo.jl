@@ -1,22 +1,17 @@
 # Advanced Usage
 ## Accumulators
 For long- running simulations with many walkers, the amount of data generated can be substantial. The `ConfigSaver`, introduced in [Transverse Field Ising Model Example](Example_transverseFieldIsing.md), must store the configurations of *each* walker at *each* observation step, which can lead to high memory consumption. Typically, one is ultimately interested in the expectation values of a handful of observables, which may also be obtained by accumulating data on-the-fly during the simulation.
-GreenFunctionMonteCarlo.jl provides a [`BasicAccumulator`](@ref) which stores the energy and some additional data required for other accumulators, as well as an  [`ObservableAccumulator`](@ref) which can be used to accumulate arbitrary observables defined as subtypes of `AbstractObservable`.
+GreenFunctionMonteCarlo.jl provides a [`BasicAccumulator`](@ref) which stores the energy and some additional data required for other accumulators, as well as a [`LazyObservableAccumulator`](@ref) and an [`ObservableAccumulator`](@ref) which can be used to accumulate arbitrary observables defined as subtypes of `AbstractObservable`.
 
 In summary, the advantages of accumulators are:
 - **Reduced Storage Usage**
 The drawbacks are:
 - **Limited Post-Processing Flexibility**: The observables cannot be obtained from post-processing. The maximum projection time needs to be defined before the simulation.
-- **Increased memory usage**: To avoid costly recomputation of expensive obersvables for the same configurations, accumulators use buffers to store the observables for the last couple of iterations to do the projection. The memory size required is given by `NObs* NWalkers * N_projection_steps*size(data_type)`. It can be advisable to use a more efficient `data_type` for the buffer, such as `Float32`. For example, accumulating the local magnetization for *N_sites*, the memory usage will be
-```@example julia
-N_sites = 500
-N_obs = N_sites
-NWalkers = 5000
-m_proj = 150
-Base.format_bytes(Base.summarysize(zeros(Float32, N_obs))* NWalkers * m_proj)
-```
 - **Possible Numerical Instabilities**: Accumulating data on-the-fly can introduce numerical instabilities, especially when the estimated average weight of the walkers is not accurate (in which case at each step, some very large and very small numbers are added to numerator and denominator). It is advisable to initialize the `ContinuousTimePropagator` with a reasonable estimate of the ground state energy to mitigate this issue. Below, it is shown how to do that. Another strategy is to use more than one bin for the accumulation, so that not too many numbers are added up to the same storage.
 
+```
+
+It may 
 ### Example run
 We first run a simulation without measuring observables to estimate the average weight of the walkers. It can be used as a replacement for equilibrating the walkers with a first `runGFMC!` call. With each epoch, the estimate will be a bit better, but typically not very many should be required.
 ```julia
@@ -25,7 +20,7 @@ mean_TotalWeights, w_avg_estimate = GFMC.estimate_weights_continuousTime!(proble
 ```
 
 The `BasicAccumulator` stores running sums of the numerator and the denominator for the energy. It also provides internal buffers which are used for the reconfiguration process.
-In order to measure other observables, one can use the `ObservableAccumulator`, which holds a reference to the `BasicAccumulator` to access the internal buffers. Here, we measure the local magnetization and the density-density correlation function as an example.
+In order to measure other observables, one can use the `LazyObservableAccumulator`, which holds a reference to the `BasicAccumulator` to access the internal buffers. Here, we measure the local magnetization and the density-density correlation function as an example.
 
 The set of observables is packed as a tuple into a `CombinedObserver`, which makes sure that each observable is updated at each observation step.
 
@@ -33,10 +28,10 @@ The set of observables is packed as a tuple into a `CombinedObserver`, which mak
 outfile = "observables.h5"
 num_bins = 32 # number of bins for the accumulation
 BAcc = BasicAccumulator(outfile,m_proj, NWalkers;weight_normalization = mean_TotalWeights, num_bins = num_bins , bin_elements = NSteps_total ÷ num_bins)
+projection_values = 1:2:m_proj # projection values at which the observables will stored. Storing fewer steps is cheaper and recommended for large observables.
+OccNum_Acc = LazyObservableAccumulator(outfile,BosonConfig(Hilbert),OccupationNumber(Nsites),BAcc, projection_values, NWalkers, Threads.nthreads())
 
-OccNum_Acc = ObservableAccumulator(outfile,OccupationNumber(Nsites),BAcc, mProj, NWalkers, Threads.nthreads())
-
-Observer = CombinedObserver((BAcc, OccNum_Acc, )) # note the tuple. Include more observable accumulators as needed
+Observer = CombinedObserver((BAcc, OccNum_Acc)) # note the tuple. Include more observable accumulators as needed
 
 CT = ContinuousTimePropagator(dtau, w_avg_estimate) # use the estimated average weight here
 runGFMC!(problem, Observer, NSteps_total; Propagator = CT) # we may override the propagator from "problem" by passing a different one as a keyword argument
@@ -56,8 +51,8 @@ function readObs(file,bunching)
     OccNumMock = (;Obs_numerators = h5read(file, "OccupationNumber_numerator"),
     Obs_denominators = h5read(file, "OccupationNumber_denominator"))
     OccupationNumbers = GFMC.get_obs_from_accumulator_bunching(OccNumMock, bunching)
-
-    Obs = (;Energy, OccupationNumbers)
+    m_values = h5read(file, "OccupationNumber_m_values")
+    Obs = (;Energy, OccupationNumbers, m_values)
     return Obs
 end
 ```
@@ -89,3 +84,13 @@ h5open(outfile, "r") do f
     println(read(f))
 end
 ```
+
+## Buffered ObservableAccumulator
+If the observables are costly to compute, it can be advisable to use the [`ObservableAccumulator`](@ref) instead of [`LazyObservableAccumulator`](@ref).
+- **Increased memory usage**: To avoid costly recomputation of expensive obersvables for the same configurations, accumulators use buffers to store the observables for the last couple of iterations to do the projection. The memory size required is given by `NObs* NWalkers * N_projection_steps*size(data_type)`. It can be advisable to use a more efficient `data_type` for the buffer, such as `Float32`. For example, accumulating the local magnetization for *N_sites*, the memory usage will be
+```@example julia
+N_sites = 500
+N_obs = N_sites
+NWalkers = 5000
+m_proj = 150
+Base.format_bytes(Base.summarysize(zeros(Float32, N_obs))* NWalkers * m_proj)

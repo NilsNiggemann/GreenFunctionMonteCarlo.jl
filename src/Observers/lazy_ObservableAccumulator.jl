@@ -32,12 +32,13 @@ function reset_accumulator!(Observables::LazyObservableAccumulator)
     return Observables
 end
 """
-    LazyObservableAccumulator(filename, Observable::AbstractObservable, BasicAcc::BasicAccumulator, m_proj::Integer, NWalkers::Integer, NThreads::Integer; Obs_Name = _type_stripped(Observable))
+    LazyObservableAccumulator(filename,conf<:AbstractConfig , Observable::AbstractObservable, BasicAcc::BasicAccumulator, m_proj::Integer, NWalkers::Integer, NThreads::Integer; Obs_Name = _type_stripped(Observable))
 
 Constructs an `LazyObservableAccumulator` for accumulating measurements of a given observable during a Monte Carlo simulation.
 
 # Arguments
 - `filename`: The path to the file where accumulated data will be stored. This argument can be in which case the accumulator will store the result only in memory.
+- `conf<:AbstractConfig`: The configuration object used for the simulation.
 - `Observable::AbstractObservable`: The observable to be measured and accumulated.
 - `BasicAcc::BasicAccumulator`: The basic accumulator object used for storing intermediate results.
 - `m_proj::Integer`: The projection quantum number or index relevant to the observable.
@@ -47,8 +48,11 @@ Constructs an `LazyObservableAccumulator` for accumulating measurements of a giv
 
 # Returns
 An `LazyObservableAccumulator` object configured for the specified observable and simulation parameters.
+
+# See also
+- [`ObservableAccumulator`](@ref)
 """
-function LazyObservableAccumulator(filename,conf,Observable::AbstractObservable,BasicAcc::BasicAccumulator,m_values::AbstractVector{Int},NWalkers::Integer,NThreads::Integer;Obs_Name = _type_stripped(Observable))
+function LazyObservableAccumulator(filename,conf::AbstractConfig,Observable::AbstractObservable,BasicAcc::BasicAccumulator,m_values::AbstractVector{Int},NWalkers::Integer,NThreads::Integer;Obs_Name = _type_stripped(Observable))
     Obs_out = obs(Observable)
     NumObs = length(Obs_out)
 
@@ -61,7 +65,7 @@ function LazyObservableAccumulator(filename,conf,Observable::AbstractObservable,
     m_proj = maximum(mvals)+1 # account for 0 projection 
     num_proj = length(mvals)
     @assert m_proj <= projection_order(BasicAcc) "Projection order m_proj=$(m_proj) must be less than the projection order of the BasicAccumulator =$(projection_order(BasicAcc))"
-    Obs_Buffers = CircularArrays.CircularArray(zeros(Float16,NWalkers,length(conf),m_proj))
+    Obs_Buffers = CircularArrays.CircularArray(zeros(eltype(conf),NWalkers,length(conf),m_proj))
     
     Obs_numerators = maybe_MMap_array(filename,"$(Obs_Name)_numerator",Float64,(NumObs,num_proj,num_bins))
     Obs_denominators = maybe_MMap_array(filename,"$(Obs_Name)_denominator",Float64,(num_proj,num_bins))
@@ -84,12 +88,13 @@ function _fill_conf_buffers!(Observables::LazyObservableAccumulator,i,Walkers::A
 
     Obs_buff_arr = parent(Obs_Buffers)
     i_wrapped = mod1(i,lastindex(Obs_Buffers,3))
+    Base.@boundscheck checkbounds(Obs_buff_arr,eachindex(Walkers),eachindex(getConfig(Walkers,1)),i_wrapped)
 
-    for α in eachindex(Walkers)
+    Threads.@threads for α in eachindex(Walkers)
         conf = getConfig(Walkers,α)
-        Base.@boundscheck checkbounds(Obs_buff_arr,α,eachindex(conf),i_wrapped)
-        Obs_buff_arr[α,:,i_wrapped] .= conf
+        @inbounds Obs_buff_arr[α,:,i_wrapped] .= conf
     end
+
     return
 end
 
@@ -133,11 +138,30 @@ function Lazy_Obs_Acc_projection!(Observables::LazyObservableAccumulator,n,Walke
 
         Threads.@threads for obs_idx in axes(Obs_numerators,1)
 
-            obs_avg = average_obs_walkers(ObsFunc,walker_confs,obs_idx,WalkerPopulations)
+            obs_avg = average_obs_walkers(ObsFunc,obs_idx,walker_confs,WalkerPopulations)
 
             Obs_numerators[obs_idx,m_index,bin_index] += obs_avg * Nw⁻¹*Gnp
         end
     end
 end
 
-average_obs_walkers(ObsFunc,walker_confs,obs_idx,WalkerPopulations) = error("not implemented for custom observable of type $(typeof(ObsFunc))")
+"""
+    average_obs_walkers(ObsFunc::AbstractObservable, obs_idx::Integer, walker_confs::AbstractMatrix{ConfType}, WalkerPopulations::AbstractVector{<:Integer}) where ConfType
+Compute the average value of a observable with index `obs_idx` across a population of walkers, given their configurations and populations.
+# Info
+This function needs to be implemented for each custom observable type. An efficient implementation is crucial for the performance if the number of observables is large.
+
+# Arguments
+- `ObsFunc::AbstractObservable`: The observable function that computes the observable value for a given configuration.
+- `obs_idx::Integer`: The index of the observable to be averaged (if the observable returns multiple values, this specifies which one to average).
+- `walker_confs::AbstractMatrix{ConfType}`: A matrix Nw × L where Nw is the number of walkers and L is the size of the configuration, containing the configurations of all walkers.
+- `WalkerPopulations::AbstractVector{<:Integer}`: A vector containing the population of walkers after a number of reconfigurations, providing the weight the contribution of each configuration to the average.
+# Returns
+The average value of the specified observable across the walker population, weighted by their populations.
+
+See also
+- [`Lazy_Obs_Acc_projection!`](@ref)
+- [`OccupationNumber`](@ref)
+- [`SpinCorrelations`](@ref)
+"""
+average_obs_walkers(ObsFunc,obs_idx,walker_confs,WalkerPopulations) = error("not implemented for custom observable of type $(typeof(ObsFunc))")

@@ -106,12 +106,16 @@ module GreenFunctionMonteCarlo
     
     include("Observables/OccupationNumber.jl")
     export OccupationNumber
+    
+    include("Observables/SpinCorrelations.jl")
+    export SpinCorrelations, get_matrix_from_tri
 
     include("Observers/BasicAccumulator.jl")
     export BasicAccumulator
 
     include("Observers/ObservableAccumulator.jl")
     export ObservableAccumulator
+
     include("Observers/lazy_ObservableAccumulator.jl")
     export LazyObservableAccumulator
     
