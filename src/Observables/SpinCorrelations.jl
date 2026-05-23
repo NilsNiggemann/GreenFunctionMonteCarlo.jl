@@ -1,3 +1,16 @@
+"""
+    SpinCorrelations{T} -> SpinCorrelations{T}
+Constructs a `SpinCorrelations` observable for a system with a specified number of sites, where `T` is the numeric type used for the internal buffer (e.g., `Float32` or `Int8`).
+# Arguments
+- `Nsites`: The number of sites in the system for which the spin correlations will be measured.
+- `t`: (optional) The numeric type for the internal buffer, defaulting to `Int8` for memory efficiency.
+# Returns
+A `SpinCorrelations` object initialized with a buffer of zeros of type `T` and length equal to the number of unique pairs of sites (i.e., `Nsites * (Nsites + 1) / 2`).
+# See also
+- [`LazyObservableAccumulator`](@ref)
+- [`ObservableAccumulator`](@ref)
+- [`OccupationNumber`](@ref)
+"""
 struct SpinCorrelations{T<:Real} <: AbstractObservable
     obsBuffer::Vector{T}
     i_inds::Vector{Int}

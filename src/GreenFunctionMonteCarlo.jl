@@ -116,7 +116,7 @@ module GreenFunctionMonteCarlo
     include("Observers/ObservableAccumulator.jl")
     export ObservableAccumulator
 
-    include("Observers/lazy_ObservableAccumulator.jl")
+    include("Observers/LazyObservableAccumulator.jl")
     export LazyObservableAccumulator
     
     include("Observers/estimate_weights.jl")

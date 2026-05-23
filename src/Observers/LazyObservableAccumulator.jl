@@ -160,7 +160,6 @@ This function needs to be implemented for each custom observable type. An effici
 The average value of the specified observable across the walker population, weighted by their populations.
 
 See also
-- [`Lazy_Obs_Acc_projection!`](@ref)
 - [`OccupationNumber`](@ref)
 - [`SpinCorrelations`](@ref)
 """

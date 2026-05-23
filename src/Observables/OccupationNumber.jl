@@ -1,3 +1,15 @@
+"""
+    OccupationNumber{T<:Real}(Nsites) -> OccupationNumber{T}
+Constructs an `OccupationNumber` observable for a system with a specified number of sites.
+# Arguments
+- `Nsites`: The number of sites in the system for which the occupation number will be measured.
+# Returns
+An `OccupationNumber` object initialized with a buffer of zeros of type `T` and length equal to `Nsites`.
+# See also
+- [`LazyObservableAccumulator`](@ref)
+- [`ObservableAccumulator`](@ref)
+- [`SpinCorrelations`](@ref)
+"""
 struct OccupationNumber{T<:Real} <: AbstractObservable
     xBuffer::Vector{T}
 end
