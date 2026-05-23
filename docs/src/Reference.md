@@ -36,10 +36,12 @@ GreenFunctionMonteCarlo.NaiveFunction
 GreenFunctionMonteCarlo.NoLogger
 GreenFunctionMonteCarlo.NoObserver
 GreenFunctionMonteCarlo.ObservableAccumulator
+GreenFunctionMonteCarlo.OccupationNumber
 GreenFunctionMonteCarlo.OneBodyDiagOperator
 GreenFunctionMonteCarlo.ProblemEnsemble
 GreenFunctionMonteCarlo.ProgressBarLogger
 GreenFunctionMonteCarlo.SimpleLogger
+GreenFunctionMonteCarlo.SpinCorrelations
 GreenFunctionMonteCarlo.TwoBodyDiagOperator
 GreenFunctionMonteCarlo.WalkerAVGObserver
 GreenFunctionMonteCarlo.ZeroDiagOperator
@@ -63,5 +65,4 @@ GreenFunctionMonteCarlo.propagateWalkers!
 GreenFunctionMonteCarlo.reconfigurateWalkers!
 GreenFunctionMonteCarlo.runGFMC!
 GreenFunctionMonteCarlo.save_params_dict
-
 ```
