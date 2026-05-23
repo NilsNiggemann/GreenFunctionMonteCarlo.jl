@@ -1,9 +1,11 @@
 abstract type AbstractParallelizationScheme end
 
 struct SingleThreaded <: AbstractParallelizationScheme end
+num_tasks(::SingleThreaded) = 1
 struct MultiThreaded <: AbstractParallelizationScheme
     nTasks::Int
 end
+num_tasks(P::MultiThreaded) = P.nTasks
 
 num_tasks_default() = Threads.nthreads()
 function num_tasks_default(NWalkers::Int)
@@ -25,3 +27,4 @@ across multiple tasks. Uses Polyester for static task scheduling.
 struct BatchMultiThreaded <: AbstractParallelizationScheme
     nTasks::Int
 end
+num_tasks(P::BatchMultiThreaded) = P.nTasks

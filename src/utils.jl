@@ -51,4 +51,13 @@ accumulate into significant GC pressure and hurt multi-threaded scaling.
     return lastindex(weights)  # fallback for floating-point rounding
 end
 
+function duplicate_rng(rng::Random.AbstractRNG, n::Integer)
+    rngs = [copy(rng) for _ in 1:n]
+    for (i, rng) in enumerate(rngs)
+        Random.seed!(rng, i + rand(rng, UInt))
+    end
+    return rngs
+end
 
+# Note: Polyester tasks are sticky so using Threads.threadid() can be used as threadsafe storage.
+polyester_get_task_local_idx(i, minbatch) = Threads.threadid()

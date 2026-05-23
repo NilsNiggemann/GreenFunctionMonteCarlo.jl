@@ -47,7 +47,7 @@ end
 ContinuousTimePropagator(dτ::Real,w_avg_estimate::Real) = ContinuousTimePropagator(float(dτ),float(w_avg_estimate))
 ContinuousTimePropagator(dτ::Real;w_avg_estimate=0.) = ContinuousTimePropagator(dτ,w_avg_estimate)
 
-@inline propagateWalkers!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, propagator::ContinuousTimePropagator, parallelization::AbstractParallelizationScheme, RNG::Random.AbstractRNG = Random.default_rng()) = continuos_time_propagation!(WE, H, logψ, Hilbert, propagator.dτ,propagator.w_avg_estimate, parallelization, RNG)
+@inline propagateWalkers!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, propagator::ContinuousTimePropagator, parallelization::AbstractParallelizationScheme, RNGs::Vector{<:Random.AbstractRNG}) = continuos_time_propagation!(WE, H, logψ, Hilbert, propagator.dτ,propagator.w_avg_estimate, parallelization, RNGs)
 
 """
     continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, parallelization::MultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
@@ -64,29 +64,32 @@ Perform continuous time propagation on a walker ensemble for a fixed time step `
 - `parallelization::MultiThreaded`: Parallelization settings for the propagation.
 - `RNG::Random.AbstractRNG`: The random number generator to be used (default is `Random.default_rng()`).
 """
-function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::MultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
+function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::MultiThreaded, RNGs::Vector{<:Random.AbstractRNG})
     
-    batches = ChunkSplitters.chunks(eachindex(WE), n = parallelization.nTasks,split= ChunkSplitters.RoundRobin())
+    batches = ChunkSplitters.chunks(eachindex(WE), n = num_tasks(parallelization),split= ChunkSplitters.RoundRobin())
 
     @sync for (i_chunk, αinds) in enumerate(batches)
+        rng = RNGs[i_chunk]
+         
         Threads.@spawn for α in αinds
-            continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, RNG)
+            continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, rng)
         end
     end
 end
 
-function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::BatchMultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
+function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::BatchMultiThreaded, RNGs::Vector{<:Random.AbstractRNG})
     αinds = eachindex(WE)
     Nw = length(αinds)
-    minbatch = clamp(Nw ÷ parallelization.nTasks, 1, Nw)
-    Polyester.@batch minbatch=minbatch for α in αinds
-        continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, RNG)
+    minbatch = clamp(Nw ÷ num_tasks(parallelization), 1, Nw)
+    Polyester.@batch minbatch=minbatch per=thread for α in αinds
+        task_idx = polyester_get_task_local_idx(α, minbatch)
+        continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, RNGs[task_idx])
     end
 end
 
-function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::SingleThreaded, RNG::Random.AbstractRNG = Random.default_rng())
+function continuos_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, dτ::Real, w_avg_estimate::Real, parallelization::SingleThreaded, RNGs::Vector{<:Random.AbstractRNG})
     for α in eachindex(WE)
-        continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, RNG)
+        continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, dτ, w_avg_estimate, first(RNGs))
     end
 end
 
