@@ -59,6 +59,8 @@ function ObservableAccumulator(filename,Observable::AbstractObservable,BasicAcc:
     Obs_numerators = maybe_MMap_array(filename,"$(Obs_Name)_numerator",Float64,(NumObs,m_proj,num_bins))
     Obs_denominators = maybe_MMap_array(filename,"$(Obs_Name)_denominator",Float64,(m_proj,num_bins))
 
+    m_values = collect(0:m_proj-1)
+    maybe_write_array(filename,"$(Obs_Name)_m_values", m_values)
     ObsAcc = ObservableAccumulator(BasicAcc,ObsFunc_buffer,Obs_Buffers,Obs_numerators,Obs_denominators)
     return ObsAcc
 end

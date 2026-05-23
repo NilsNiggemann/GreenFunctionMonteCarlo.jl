@@ -112,7 +112,9 @@ module GreenFunctionMonteCarlo
 
     include("Observers/ObservableAccumulator.jl")
     export ObservableAccumulator
-
+    include("Observers/lazy_ObservableAccumulator.jl")
+    export LazyObservableAccumulator
+    
     include("Observers/estimate_weights.jl")
     export estimate_weights_continuousTime!
 
