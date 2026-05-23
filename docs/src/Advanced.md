@@ -9,9 +9,6 @@ The drawbacks are:
 - **Limited Post-Processing Flexibility**: The observables cannot be obtained from post-processing. The maximum projection time needs to be defined before the simulation.
 - **Possible Numerical Instabilities**: Accumulating data on-the-fly can introduce numerical instabilities, especially when the estimated average weight of the walkers is not accurate (in which case at each step, some very large and very small numbers are added to numerator and denominator). It is advisable to initialize the `ContinuousTimePropagator` with a reasonable estimate of the ground state energy to mitigate this issue. Below, it is shown how to do that. Another strategy is to use more than one bin for the accumulation, so that not too many numbers are added up to the same storage.
 
-```
-
-It may 
 ### Example run
 We first run a simulation without measuring observables to estimate the average weight of the walkers. It can be used as a replacement for equilibrating the walkers with a first `runGFMC!` call. With each epoch, the estimate will be a bit better, but typically not very many should be required.
 ```julia
@@ -94,3 +91,4 @@ N_obs = N_sites
 NWalkers = 5000
 m_proj = 150
 Base.format_bytes(Base.summarysize(zeros(Float32, N_obs))* NWalkers * m_proj)
+```

@@ -195,14 +195,14 @@ end
 Here, `OccupationNumber` is a pre-defined observable. However, it is relatively simple to implement your own observables by defining a new subtype of `AbstractObservable`. As an example lets try to compute $\langle S^z_i S^z_j \rangle$ in a simple way.
 
 ```@example TFI
-struct SpinCorrelations{T<:Real} <: AbstractObservable
+struct CustomSpinCorrelations{T<:Real} <: AbstractObservable
     ObservableBuffer::Matrix{T}
 end
-SpinCorrelations(Nsites) = SpinCorrelations(zeros(Nsites,Nsites))
+CustomSpinCorrelations(Nsites) = CustomSpinCorrelations(zeros(Nsites,Nsites))
 
-Base.copy(O::SpinCorrelations) = SpinCorrelations(copy(O.ObservableBuffer))
-GreenFunctionMonteCarlo.obs(O::SpinCorrelations) = O.ObservableBuffer
-function (O::SpinCorrelations)(out,config)
+Base.copy(O::CustomSpinCorrelations) = CustomSpinCorrelations(copy(O.ObservableBuffer))
+GreenFunctionMonteCarlo.obs(O::CustomSpinCorrelations) = O.ObservableBuffer
+function (O::CustomSpinCorrelations)(out,config)
     for i in axes(out,1)
         for j in axes(out,2)
             out[i,j] = σz(i,config) * σz(j,config)
@@ -215,7 +215,7 @@ Key here is the function `(O::My_new_OccupationNumber)(out,config)`. Given a con
 Also note the defintion of `GreenFunctionMonteCarlo.obs(O::My_new_OccupationNumber)`, which returns the buffer that is used to store the observable. 
 Now we can use this observable in the same way as the `OccupationNumber` above:
 ```@example TFI
-Observable = SpinCorrelations(lattice_size)
+Observable = CustomSpinCorrelations(lattice_size)
 Corrs = [stack(getObs_diagonal(O,Observable,1:mProj)) for O in Observers_jastrow]
 
 Corr_mean = mean(Corrs)
@@ -238,5 +238,5 @@ end
 Note that we left quite some room to improve performance here. For instance, we do not actually have to compute the full matrix of correlations, but only the upper triangle. 
 
 !!! tip
-    While the approach above is very convenient, for big simulations, it may not be feasible to store all configurations as the output file may become too large. For this case, it is also possible to use accumulators, such as [`BasicAccumulator`](@ref) and [`ObservableAccumulator`](@ref). Accumulators compute the imaginary time projection of the observable at every step of the simulation, thereby saving a lot of storage. `BasicAccumulator` contains all the essential information to allow for projection during the run, while `ObservableAccumulator` may be used to compute observables. 
+    While the approach above is very convenient, for big simulations, it may not be feasible to store all configurations as the output file may become too large. For this case, it is also possible to use accumulators, such as [`BasicAccumulator`](@ref) and [`LazyObservableAccumulator`](@ref). Accumulators compute the imaginary time projection of the observable at every step of the simulation, thereby saving a lot of storage. `BasicAccumulator` contains all the essential information to allow for projection during the run, while `LazyObservableAccumulator` may be used to compute observables. 
     To combine several accumulators, you can use `CombinedObserver`. 
