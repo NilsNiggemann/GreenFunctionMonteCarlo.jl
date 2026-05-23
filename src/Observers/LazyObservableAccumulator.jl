@@ -18,7 +18,7 @@ An accumulator for observables in Monte Carlo simulations. This struct is design
 """
 struct LazyObservableAccumulator{ObsType<:AbstractObservable,T_high<:AbstractFloat,T_low<:Real} <: AbstractObserver
     BasicAcc::BasicAccumulator{T_high}
-    ObsFunc_buffer::Vector{ObsType}
+    ObsFunc::ObsType
     Obs_Buffers::CircularArrays.CircularArray{T_low, 3, Array{T_low, 3}}
     Obs_numerators::Array{T_high,3}
     Obs_denominators::Matrix{T_high}
@@ -57,7 +57,7 @@ function LazyObservableAccumulator(filename,conf::AbstractConfig,Observable::Abs
     NumObs = length(Obs_out)
 
     num_bins = get_num_bins(BasicAcc)
-    ObsFunc_buffer = [copy(Observable) for _ in 1:NThreads]
+    ObsFunc = copy(Observable)
     mvals = collect(m_values)
 
 
@@ -72,7 +72,7 @@ function LazyObservableAccumulator(filename,conf::AbstractConfig,Observable::Abs
 
     maybe_write_array(filename,"$(Obs_Name)_m_values",mvals)
 
-    ObsAcc = LazyObservableAccumulator(BasicAcc,ObsFunc_buffer,Obs_Buffers,Obs_numerators,Obs_denominators,mvals)
+    ObsAcc = LazyObservableAccumulator(BasicAcc,ObsFunc,Obs_Buffers,Obs_numerators,Obs_denominators,mvals)
     return ObsAcc
 end
 
@@ -123,8 +123,7 @@ function Lazy_Obs_Acc_projection!(Observables::LazyObservableAccumulator,n,Walke
     Base.@boundscheck checkbounds(Obs_numerators,:,:,bin_index)
     PopulationMatrix_parent = parent(PopulationMatrix)
     Nw⁻¹ = 1/Nw
-    i_chunk = 1       
-    ObsFunc = Observables.ObsFunc_buffer[i_chunk]
+    ObsFunc = Observables.ObsFunc
     Threads.@threads for m_index in eachindex(m_values)
         m = m_values[m_index]
         Gnp = Gnps[n,1+2m]

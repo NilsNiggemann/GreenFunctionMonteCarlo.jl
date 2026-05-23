@@ -28,12 +28,6 @@ function getLocalEnergy(x::AbstractConfig,H::AbstractSignFreeOperator,logψ::Abs
     return getLocalEnergy(x,weights,Hxx)
 end
 
-# function getLocalEnergy(WE::AbstractWalkerEnsemble,α,Hxx::DiagonalOperator)
-#     Config = getConfig(WE,α)
-#     moveWeights = getMoveWeights(WE,α)
-#     return getLocalEnergy(Config,moveWeights,Hxx)
-# end
-
 function getLocalEnergyWalkers_before(Walkers::AbstractWalkerEnsemble,Hxx::DiagonalOperator)
     num = 0.
     denom = 0.
