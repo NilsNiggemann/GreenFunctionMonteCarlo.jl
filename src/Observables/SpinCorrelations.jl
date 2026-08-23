@@ -74,5 +74,19 @@ function get_matrix_from_tri(els::AbstractVector)
         mat[j,i] = els[index]
 
     end
+
+    return mat
+end
+function get_matrix_from_tri(els::AbstractVector,i_inds::AbstractVector, j_inds::AbstractVector)
+    Nsites = Int((sqrt(8length(els)+1)-1)÷2)
+    mat = zeros(eltype(els), Nsites, Nsites)
+
+    LoopVectorization.@tturbo for index in eachindex(i_inds)
+        i, j = i_inds[index], j_inds[index]
+        mat[i,j] = els[index]
+        mat[j,i] = els[index]
+
+    end
+
     return mat
 end

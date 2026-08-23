@@ -16,13 +16,14 @@ An accumulator for observables in Monte Carlo simulations. This struct is design
 - [`BasicAccumulator`](@ref)
 - [`ObservableAccumulator`](@ref)
 """
-struct LazyObservableAccumulator{ObsType<:AbstractObservable,T_high<:AbstractFloat,T_low<:Real} <: AbstractObserver
+struct LazyObservableAccumulator{ObsType<:AbstractObservable,T_high<:AbstractFloat,T_low<:Real,idxrange} <: AbstractObserver
     BasicAcc::BasicAccumulator{T_high}
     ObsFunc::ObsType
     Obs_Buffers::CircularArrays.CircularArray{T_low, 3, Array{T_low, 3}}
     Obs_numerators::Array{T_high,3}
     Obs_denominators::Matrix{T_high}
     m_values::Vector{Int}
+    batches::Vector{idxrange}
 end
 projection_order(Observables::LazyObservableAccumulator) = size(Observables.Obs_denominators,1) - 1
 
@@ -71,8 +72,15 @@ function LazyObservableAccumulator(filename,conf::AbstractConfig,Observable::Abs
     Obs_denominators = maybe_MMap_array(filename,"$(Obs_Name)_denominator",Float64,(num_proj,num_bins))
 
     maybe_write_array(filename,"$(Obs_Name)_m_values",mvals)
+    Polyester.reset_threads!()
+    # precompute batches for parallel processing and store in the accumulator
+    n_obs = length(Obs_out)
+    n_m = length(mvals)
+    nchunks = max(1, 4 * Int(NThreads))
+    batches_iter = ChunkSplitters.chunks(1:(n_obs * n_m), n = nchunks, split = ChunkSplitters.Consecutive())
+    stored_batches = collect(batches_iter)
 
-    ObsAcc = LazyObservableAccumulator(BasicAcc,ObsFunc,Obs_Buffers,Obs_numerators,Obs_denominators,mvals)
+    ObsAcc = LazyObservableAccumulator(BasicAcc,ObsFunc,Obs_Buffers,Obs_numerators,Obs_denominators,mvals, stored_batches)
     return ObsAcc
 end
 
@@ -105,7 +113,6 @@ function saveObservables_after!(Observables::LazyObservableAccumulator,i,Walkers
 end
 
 function Lazy_Obs_Acc_projection!(Observables::LazyObservableAccumulator,n,Walkers::AbstractWalkerEnsemble)
-    
     (;Obs_numerators,Obs_denominators,Obs_Buffers) = Observables
     (;PopulationMatrix,Gnps,reconfigurationTable) = Observables.BasicAcc
     
@@ -124,18 +131,36 @@ function Lazy_Obs_Acc_projection!(Observables::LazyObservableAccumulator,n,Walke
     PopulationMatrix_parent = parent(PopulationMatrix)
     Nw⁻¹ = 1/Nw
     ObsFunc = Observables.ObsFunc
-    Threads.@threads for m_index in eachindex(m_values)
-        m = m_values[m_index]
-        Gnp = Gnps[n,1+2m]
-        Gnp == 0 && continue
-        Obs_denominators[m_index,bin_index] += Gnp
-        n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
-        m_index_wrapped = mod1(m_index,lastindex(PopulationMatrix_parent,2))
+    obs_indices = axes(Obs_numerators,1)
+    m_indices = eachindex(m_values)
+    n_obs = length(obs_indices)
+    n_m = length(m_values)
+    first_obs_idx = first(obs_indices)
 
-        WalkerPopulations = @view PopulationMatrix_parent[:,m_index_wrapped]
-        walker_confs = @view Obs_Buffers_arr[:,:,n_m_wrapped]
+    collectedbatches = Observables.batches
+    Polyester.@batch per = thread for (k_inds) in collect(collectedbatches)
+    # Threads.@threads for ibatch in eachindex(collectedbatches)
+        # k_inds = collectedbatches[ibatch]
 
-        Threads.@threads for obs_idx in axes(Obs_numerators,1)
+        for k in k_inds
+            obs_linear = mod1(k, n_obs)
+            m_linear = (k - 1) ÷ n_obs + 1
+            obs_idx = obs_indices[obs_linear]
+            m_index = m_indices[m_linear]
+
+            m = m_values[m_index]
+            Gnp = Gnps[n,1+2m]
+            Gnp == 0 && continue
+
+            if obs_idx == first_obs_idx
+                Obs_denominators[m_index,bin_index] += Gnp
+            end
+
+            n_m_wrapped = mod1(n-m,lastindex(Obs_Buffers,3))
+            m_index_wrapped = mod1(m_index,lastindex(PopulationMatrix_parent,2))
+
+            WalkerPopulations = @view PopulationMatrix_parent[:,m_index_wrapped]
+            walker_confs = @view Obs_Buffers_arr[:,:,n_m_wrapped]
 
             obs_avg = average_obs_walkers(ObsFunc,obs_idx,walker_confs,WalkerPopulations)
 
