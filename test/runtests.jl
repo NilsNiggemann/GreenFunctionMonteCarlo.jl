@@ -179,7 +179,52 @@ end
 
         @test stack(ensemble.Configs) != AllConfs
     end
-    
+
+end
+##
+@testitem "Discrete Propagator Walker Ensemble Tests" begin
+    include("utils.jl")
+    Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
+    config = BosonConfig(Hilbert)
+    logψ = GFMC.EqualWeightSuperposition()
+
+    DT = DiscretePropagator(1., 3)
+
+    H = localOperator(
+        [
+            Bool[0,1,1],
+            Bool[0,0,1],
+            Bool[0,1,0],
+            Bool[1,1,0],
+            ]
+    , -[0.5, 0.3, 0.2 ,0.4], ZeroDiagOperator(), Hilbert)
+
+    NumWalkers = 8
+    ensemble = GFMC.allocate_walkerEnsemble(config,logψ,NumWalkers,H)
+
+    RNG = StableRNG(1234)
+    GFMC.propagateWalkers!(ensemble, H, logψ, Hilbert, DT, GFMC.SingleThreaded(),RNG)
+
+    @testset "Weights and Energies" begin
+        @test all(isfinite, GFMC.getWalkerWeights(ensemble))
+        @test all(>=(0), GFMC.getWalkerWeights(ensemble))
+        @test all(isfinite, GFMC.getLocalEnergies(ensemble))
+    end
+
+    AllConfs = stack(ensemble.Configs)
+    @testset "Discrete Time Propagation" begin
+        @test AllConfs != zeros(Bool,3,NumWalkers)
+    end
+
+    @testset "Reproducibility" begin
+        ensemble2 = GFMC.allocate_walkerEnsemble(config,logψ,NumWalkers,H)
+        RNG2 = StableRNG(1234)
+        GFMC.propagateWalkers!(ensemble2, H, logψ, Hilbert, DT, GFMC.SingleThreaded(),RNG2)
+
+        @test stack(ensemble2.Configs) == AllConfs
+        @test GFMC.getWalkerWeights(ensemble2) == GFMC.getWalkerWeights(ensemble)
+        @test GFMC.getLocalEnergies(ensemble2) == GFMC.getLocalEnergies(ensemble)
+    end
 end
 ##
 
@@ -331,6 +376,107 @@ end
         end
     end
 end
+
+@testitem "Accumulator TFI Discrete" begin
+    include("utils.jl")
+    using GreenFunctionMonteCarlo.Statistics:mean
+
+    function E_critPoint_exact(L)
+        return 1 - csc(pi / (2 * (2 * L + 1)))
+    end
+    σz(n::Bool) = (1 - 2 * n)
+    σz(i, conf::AbstractArray) = σz(conf[i])
+
+    using GreenFunctionMonteCarlo.LinearAlgebra
+    NSites = 2
+    NSteps = 1500
+    mProj = 20
+    NWalkers = 2
+    nBranch = 5
+
+    RNG = StableRNG(1234)
+
+    Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
+    moves = eachcol(Bool.(I(NSites))) # each move flips a single spin
+    offdiagElements = -ones(NSites)
+    # Negative J: the diagonal (Ising) term has the opposite sign of the "Accumulator TFI" test above.
+    # On this bipartite open chain, the staggered gauge transformation σz_i -> -σz_i on alternating sites
+    # maps J -> -J while leaving the transverse-field term invariant, so the spectrum (and hence the exact
+    # critical-point ground energy) is identical between positive- and negative-J TFI here.
+    Hxx = DiagOperator(x-> -sum(σz(i, x) * σz(i + 1, x) for i in eachindex(x)[1:end-1]))
+
+    H = localOperator(moves, offdiagElements, Hxx, Hilbert)
+
+    config = BosonConfig(Hilbert)
+    rand!(RNG,config)
+    logψ = GFMC.EqualWeightSuperposition()
+
+    # J is negative here, so H_xx(x) <= 0 for all reachable configurations, and Λ=1 keeps the self-loop
+    # weight Λ - H_xx(x) safely positive without needing any pre-tuning of w_avg_estimate.
+    DT = DiscretePropagator(1., nBranch)
+
+    prob = GFMCProblem(config, NWalkers, DT; logψ, H, Hilbert)
+
+    outfile = tempname()
+
+    BObs = GFMC.BasicObserver(outfile, NSteps, NWalkers)
+    CObs = GFMC.ConfigurationObserver(outfile, config, NSteps, NWalkers)
+
+    BasicAccumulatorFile = GFMC.BasicAccumulator(outfile, mProj, NWalkers)
+    ObsAccumulatorFile = GFMC.ObservableAccumulator(outfile,OccupationNumber(NSites),BasicAccumulatorFile, mProj, NWalkers, Threads.nthreads())
+
+    Observer = GFMC.CombinedObserver((BObs, CObs,BasicAccumulatorFile, ObsAccumulatorFile))
+
+    runGFMC!(prob, Observer, NSteps; rng = RNG)
+
+    Energy = GFMC.getEnergies(BObs.TotalWeights, BObs.energies, mProj)
+    Energy_direct = mean(GFMC.get_energy_from_accumulator_bunching(BasicAccumulatorFile, 1)) .* NSites
+    @testset "BasicAccumulator" begin
+
+        @test isfile(outfile)
+
+        GFMC.HDF5.h5open(outfile, "r") do file
+            @test haskey(file, "Gnp_denominator")
+
+            Gnp_denominator = read(file["Gnp_denominator"])
+
+            @test haskey(file, "en_numerator")
+            en_numerator = read(file["en_numerator"])
+            @test !iszero(Gnp_denominator)
+            @test !iszero(en_numerator)
+
+            @test Energy ≈ Energy_direct atol = 1e-10
+            @test Energy[end÷2] ≈ E_critPoint_exact(NSites) rtol = 3e-2
+        end
+    end
+
+    Gnps = GFMC.precomputeNormalizedAccWeight(BObs.TotalWeights,2mProj)
+
+    n_avg = stack(getObs_diagonal(Gnps,CObs.SaveConfigs,BObs.reconfigurationTable,OccupationNumber(NSites),1:mProj))
+
+    n_avg_direct = mean(GFMC.get_obs_from_accumulator_bunching(ObsAccumulatorFile, 1))
+
+    direct_mean = dropdims(mean( CObs.SaveConfigs,dims = (2,3)),dims=(2,3))
+
+    @testset "ObservableAccumulator" begin
+
+        @test isfile(outfile)
+        GFMC.HDF5.h5open(outfile, "r") do file
+            @test haskey(file, "OccupationNumber_denominator")
+
+            OccupationNumber_denominator = read(file["OccupationNumber_denominator"])
+
+            @test haskey(file, "OccupationNumber_numerator")
+            OccupationNumber_numerator = read(file["OccupationNumber_numerator"])
+            @test !iszero(OccupationNumber_denominator)
+            @test !iszero(OccupationNumber_numerator)
+
+            @test n_avg_direct[:,1] ≈ direct_mean atol = 1e-13
+            @test n_avg ≈ n_avg_direct atol = 1e-10
+        end
+    end
+end
+
 @testitem "RNG Threading reproducibility" begin
     include("utils.jl")
     using GreenFunctionMonteCarlo.Statistics:mean
