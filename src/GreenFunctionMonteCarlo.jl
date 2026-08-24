@@ -47,7 +47,7 @@ module GreenFunctionMonteCarlo
 
     include("AbstractTypes/AbstractTypes.jl")
 
-    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractObservable, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator, AbstractLogger
+    export AbstractWalkerEnsemble, AbstractPropagator, AbstractMove, AbstractConfig, AbstractHilbertSpace, AbstractOperator, AbstractGuidingFunction, AbstractGFMCProblem, AbstractObserver, AbstractObservable, AbstractParallelizationScheme, AbstractConstraint, AbstractSignFreeOperator, AbstractLogger, AbstractOffdiagonalObservable
 
     export ZeroDiagOperator
 
@@ -122,6 +122,14 @@ module GreenFunctionMonteCarlo
     include("Observers/LazyObservableAccumulator.jl")
     export LazyObservableAccumulator
     
+    include("Optional/ForwardWalking/OffdiagonalObservableOperator.jl")
+    export offdiagonalObservable, LocalOffdiagonalObservable
+
+    include("Optional/ForwardWalking/ForwardWalkingPopulation.jl")
+
+    include("Optional/ForwardWalking/ForwardWalkingAccumulator.jl")
+    export ForwardWalkingAccumulator, get_observable_from_accumulator, get_observable_from_accumulator_bunching
+
     include("Observers/estimate_weights.jl")
     export estimate_weights_continuousTime!
 
