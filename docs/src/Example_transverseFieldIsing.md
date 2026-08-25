@@ -192,51 +192,44 @@ let
 end
 ```
 
-Here, `OccupationNumber` is a pre-defined observable. However, it is relatively simple to implement your own observables by defining a new subtype of `AbstractObservable`. As an example lets try to compute $\langle S^z_i S^z_j \rangle$ in a simple way.
+Here, `OccupationNumber` is a pre-defined observable. Correlation functions such as $\langle S^z_i S^z_j \rangle$ are common enough to also come pre-defined: [`SpinCorrelations`](@ref) is a `@turbo`-accelerated implementation that only computes the upper triangle of the correlation matrix (use [`get_matrix_from_tri`](@ref) to expand its output back into a full matrix).
 
-```@example TFI
-struct CustomSpinCorrelations{T<:Real} <: AbstractObservable
-    ObservableBuffer::Matrix{T}
-end
-CustomSpinCorrelations(Nsites) = CustomSpinCorrelations(zeros(Nsites,Nsites))
+It is also relatively simple to implement your own observables by defining a new subtype `O` of [`AbstractObservable`](@ref): you need `obs(::O)` returning a preallocated output buffer, a callable `(::O)(out, config)` that fills `out` given a configuration, and `Base.copy(::O)`. The `OccupationNumber` and `SpinCorrelations` source files are good templates to start from.
 
-Base.copy(O::CustomSpinCorrelations) = CustomSpinCorrelations(copy(O.ObservableBuffer))
-GreenFunctionMonteCarlo.obs(O::CustomSpinCorrelations) = O.ObservableBuffer
-function (O::CustomSpinCorrelations)(out,config)
-    for i in axes(out,1)
-        for j in axes(out,2)
-            out[i,j] = σz(i,config) * σz(j,config)
-        end
-    end
-    return out
-end
-```
-Key here is the function `(O::My_new_OccupationNumber)(out,config)`. Given a configuration `config`, it computes the estimate observable and stores it in a pre-allocated buffer `out`. 
-Also note the defintion of `GreenFunctionMonteCarlo.obs(O::My_new_OccupationNumber)`, which returns the buffer that is used to store the observable. 
-Now we can use this observable in the same way as the `OccupationNumber` above:
-```@example TFI
-Observable = CustomSpinCorrelations(lattice_size)
-Corrs = [stack(getObs_diagonal(O,Observable,1:mProj)) for O in Observers_jastrow]
+!!! note "Two ways to measure diagonal observables"
+    So far we used [`ConfigObserver`](@ref) together with `getObs_diagonal` to compute observables *after* the simulation, from the stored configurations. This is the most flexible option: any observable can be evaluated at any projection step, purely in post-processing. Its cost is memory/storage — every walker configuration at every observation step must be kept.
 
-Corr_mean = mean(Corrs)
-Corr_std = std(Corrs)
+    For long-running simulations, it is usually preferable to accumulate observables *during* the run instead, using a [`LazyObservableAccumulator`](@ref). This fixes the set of observables and projection steps ahead of time, but avoids storing full configuration histories, which lets you scale to far more walkers/steps. This is demonstrated next.
 
-let 
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel=L"$τ$ (imaginary time)", ylabel=L"$\langle S^z_i\rangle$")
-    tau =( 0:mProj-1) * dtau
-    
-    i = 2
-    for j in 1:lattice_size
-        lines!(ax, tau, Corr_mean[i,j,:])
-        band!(ax, tau, Corr_mean[i,j,:] - Corr_std[i,j,:], Corr_mean[i,j,:] + Corr_std[i,j,:], alpha = 0.5)
-    end
-    fig
-end
+## Efficient observable accumulation for large runs
+
+For production runs, [`LazyObservableAccumulator`](@ref) is the recommended way to measure diagonal observables such as [`OccupationNumber`](@ref) and [`SpinCorrelations`](@ref): it projects each observable to the requested imaginary times on the fly and only stores the resulting (small) numerator/denominator arrays, rather than every walker configuration.
+
+We first run a few epochs without observing to get a good estimate of the average walker weight — this improves numerical stability of the accumulation and can replace an initial equilibration run. We also use [`BatchMultiThreaded`](@ref), a Polyester-based parallelization scheme that tends to outperform the default `MultiThreaded` scheme when many CPU cores are available (see the "Parallelization" section in [Advanced Usage](Advanced.md) for details).
+
+```julia
+NWalkers = 10
+parallelization = BatchMultiThreaded(Threads.nthreads())
+problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert, parallelization)
+
+mean_TotalWeights, w_avg_estimate = GFMC.estimate_weights_continuousTime!(problem; Nepochs=4, Nsamples=1000, verbose=true, logger=nothing)
 ```
 
-Note that we left quite some room to improve performance here. For instance, we do not actually have to compute the full matrix of correlations, but only the upper triangle. 
+The set of accumulators is combined into a single `CombinedObserver`, so that each of them is updated at every observation step. `BasicAccumulator` provides the buffers shared by all `LazyObservableAccumulator`s, and stores the energy itself.
 
-!!! tip
-    While the approach above is very convenient, for big simulations, it may not be feasible to store all configurations as the output file may become too large. For this case, it is also possible to use accumulators, such as [`BasicAccumulator`](@ref) and [`LazyObservableAccumulator`](@ref). Accumulators compute the imaginary time projection of the observable at every step of the simulation, thereby saving a lot of storage. `BasicAccumulator` contains all the essential information to allow for projection during the run, while `LazyObservableAccumulator` may be used to compute observables. 
-    To combine several accumulators, you can use `CombinedObserver`. 
+```julia
+outfile = "observables.h5"
+NSteps_total = 2000  # total number of simulation steps
+num_bins = 32         # number of bins used for the accumulation (see "Advanced Usage" for error estimation via binning)
+projection_values = 0:5:mProj-1 # imaginary-time projections at which the observables are stored; storing fewer steps is cheaper
+
+BAcc = BasicAccumulator(outfile, mProj, NWalkers; weight_normalization = mean_TotalWeights, num_bins, bin_elements = NSteps_total ÷ num_bins + 1)
+OccNum_Acc = LazyObservableAccumulator(outfile, BosonConfig(Hilbert), OccupationNumber(lattice_size), BAcc, projection_values, NWalkers, Threads.nthreads())
+SpinCorr_Acc = LazyObservableAccumulator(outfile, BosonConfig(Hilbert), SpinCorrelations(lattice_size), BAcc, projection_values, NWalkers, Threads.nthreads())
+Observer = CombinedObserver((BAcc, OccNum_Acc, SpinCorr_Acc))
+
+CT = ContinuousTimePropagator(dtau, w_avg_estimate) # use the estimated average weight to reduce numerical error
+runGFMC!(problem, Observer, NSteps_total; Propagator = CT, parallelization)
+```
+
+After the run, the numerators and denominators for each observable are available both on the accumulators themselves and in `outfile` (HDF5). See [Advanced Usage](Advanced.md) for how to bin the data, estimate error bars, and read it back from disk, as well as for the buffered [`ObservableAccumulator`](@ref) — a middle ground that keeps observable buffers in memory across a few projection steps, at extra memory cost, to avoid recomputing expensive observables.
