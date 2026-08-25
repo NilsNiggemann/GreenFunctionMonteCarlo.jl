@@ -10,47 +10,41 @@ The drawbacks are:
 - **Possible Numerical Instabilities**: Accumulating data on-the-fly can introduce numerical instabilities, especially when the estimated average weight of the walkers is not accurate (in which case at each step, some very large and very small numbers are added to numerator and denominator). It is advisable to initialize the `ContinuousTimePropagator` with a reasonable estimate of the ground state energy to mitigate this issue. Below, it is shown how to do that. Another strategy is to use more than one bin for the accumulation, so that not too many numbers are added up to the same storage.
 
 ### Example run
-We first run a simulation without measuring observables to estimate the average weight of the walkers. It can be used as a replacement for equilibrating the walkers with a first `runGFMC!` call. With each epoch, the estimate will be a bit better, but typically not very many should be required.
-```julia
-problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert)
-mean_TotalWeights, w_avg_estimate = GFMC.estimate_weights_continuousTime!(problem;Nepochs=4,Nsamples=400,verbose=true,logger = nothing)
-```
+A full worked example — estimating the average walker weight, setting up a `BasicAccumulator` together with `LazyObservableAccumulator`s for [`OccupationNumber`](@ref) and [`SpinCorrelations`](@ref), and running the simulation — is shown in the ["Efficient observable accumulation for large runs"](Example_transverseFieldIsing.md#Efficient-observable-accumulation-for-large-runs) section of the tutorial. The `BasicAccumulator` stores running sums of the numerator and the denominator for the energy, and also provides internal buffers used by `LazyObservableAccumulator`s and by the reconfiguration process; several observables are combined via a `CombinedObserver`, which updates each of them at every observation step.
 
-The `BasicAccumulator` stores running sums of the numerator and the denominator for the energy. It also provides internal buffers which are used for the reconfiguration process.
-In order to measure other observables, one can use the `LazyObservableAccumulator`, which holds a reference to the `BasicAccumulator` to access the internal buffers. Here, we measure the local magnetization and the density-density correlation function as an example.
-
-The set of observables is packed as a tuple into a `CombinedObserver`, which makes sure that each observable is updated at each observation step.
-
-```julia
-outfile = "observables.h5"
-num_bins = 32 # number of bins for the accumulation
-BAcc = BasicAccumulator(outfile,m_proj, NWalkers;weight_normalization = mean_TotalWeights, num_bins = num_bins , bin_elements = NSteps_total ÷ num_bins)
-projection_values = 1:2:m_proj # projection values at which the observables will stored. Storing fewer steps is cheaper and recommended for large observables.
-OccNum_Acc = LazyObservableAccumulator(outfile,BosonConfig(Hilbert),OccupationNumber(Nsites),BAcc, projection_values, NWalkers, Threads.nthreads())
-
-Observer = CombinedObserver((BAcc, OccNum_Acc)) # note the tuple. Include more observable accumulators as needed
-
-CT = ContinuousTimePropagator(dtau, w_avg_estimate) # use the estimated average weight here
-runGFMC!(problem, Observer, NSteps_total; Propagator = CT) # we may override the propagator from "problem" by passing a different one as a keyword argument
-```
+In the tutorial's example, `outfile = "observables.h5"`, `m_proj = mProj`, and `NSteps_total = 2000`.
 
 ### Example evaluation
 After the simulation, the accumulated data can be accessed from the HDF5 file. We still need to do some post-processing, such as averaging over the bins. This is not done automatically in the previous step, because the binning may also be used to estimate error bars, provided that the simulation is long enough to decorrelate the bins.
 
+The pattern of packing numerators/denominators read from the file into a mock `NamedTuple` (mimicking the accumulator's fields) generalizes to any observable stored via `LazyObservableAccumulator`/`ObservableAccumulator`, since they all share the `Obs_Name_numerator`/`Obs_Name_denominator`/`Obs_Name_m_values` naming convention. `SpinCorrelations` additionally needs its upper-triangular buffer expanded back into a full matrix, for which we reuse [`get_matrix_from_tri`](@ref).
 ```julia
 # read the data from the HDF5 file and pack the numerators and denominators into tuples that mock the structure of the accumulators.
 # Note: If the accumulators themselves are still in memory, we can of course also use them instead.
-function readObs(file,bunching)
-    BasicAccMock = (;en_numerator = h5read(file, "en_numerator"),Gnp_denominator = h5read(file, "Gnp_denominator"))
+getSSCorr(v::AbstractVector) = get_matrix_from_tri(v) # expand one upper-triangular buffer into a full Nsites × Nsites matrix
+getSSCorr(M::AbstractMatrix) = stack(getSSCorr.(eachcol(M))) # ...for every projection step (one column each)
 
+function read_obs(file, key, bunching)
+    ObsMock = (;
+        Obs_numerators = h5read(file, "$(key)_numerator"),
+        Obs_denominators = h5read(file, "$(key)_denominator"),
+    )
+    m_values = h5read(file, "$(key)_m_values")
+    obs = GFMC.get_obs_from_accumulator_bunching(ObsMock, bunching)
+    return obs, m_values
+end
+
+function readObs(file, bunching)
+    BasicAccMock = (;en_numerator = h5read(file, "en_numerator"), Gnp_denominator = h5read(file, "Gnp_denominator"))
     Energy = GFMC.get_energy_from_accumulator_bunching(BasicAccMock, bunching)
 
-    OccNumMock = (;Obs_numerators = h5read(file, "OccupationNumber_numerator"),
-    Obs_denominators = h5read(file, "OccupationNumber_denominator"))
-    OccupationNumbers = GFMC.get_obs_from_accumulator_bunching(OccNumMock, bunching)
-    m_values = h5read(file, "OccupationNumber_m_values")
-    Obs = (;Energy, OccupationNumbers, m_values)
-    return Obs
+    OccupationNumbers, mvalues_occ = read_obs(file, "OccupationNumber", bunching)
+    SpinCorrs, mvalues_corr = read_obs(file, "SpinCorrelations", bunching)
+    SSCorr = getSSCorr.(SpinCorrs) # one full correlation matrix per m-value, per bin
+
+    dtau = h5read(file, "params/dtau") # any other parameter saved via `save_params_dict` (see below) can be read back the same way
+
+    return (;Energy, dtau, mvalues_occ, OccupationNumbers, mvalues_corr, SSCorr)
 end
 ```
 If we call the function with `bunching = 8`, the following will happen:
@@ -91,4 +85,23 @@ N_obs = N_sites
 NWalkers = 5000
 m_proj = 150
 Base.format_bytes(Base.summarysize(zeros(Float32, N_obs))* NWalkers * m_proj)
+```
+
+## Parallelization
+`GFMCProblem` accepts a `parallelization` keyword argument controlling how walkers are distributed across threads, defaulting to `MultiThreaded` (which uses `Threads.@spawn` over chunks of walkers). Two other schemes are available:
+- `SingleThreaded`: no parallelization, mainly useful for debugging.
+- [`BatchMultiThreaded`](@ref): uses [Polyester.jl](https://github.com/JuliaSIMD/Polyester.jl) for static, low-overhead task scheduling instead of `Threads.@spawn`. It generally performs better than `MultiThreaded` when many CPU cores are available, and is used throughout the tutorial's accumulator example.
+
+```julia
+parallelization = BatchMultiThreaded(Threads.nthreads()) # nTasks should be a small multiple of Threads.nthreads()
+problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert, parallelization)
+```
+
+The parallelization scheme can also be overridden per call, e.g. `runGFMC!(problem, Observer, NSteps; parallelization = BatchMultiThreaded(Threads.nthreads()))`.
+
+## DiscretePropagator
+[`ContinuousTimePropagator`](@ref) is the recommended propagator for most problems. [`DiscretePropagator`](@ref) implements the more traditional discrete-time projector `G = Λ·I - H`: at each of `nBranch` sub-steps, a walker either stays put (self-loop weight `Λ - H_xx(x)`) or moves via an off-diagonal matrix element. This requires choosing `Λ ≥ H_xx(x)` for every configuration visited, and is only efficient when a reasonably tight such `Λ` is known — i.e. when the diagonal part `H_xx` is small or zero. Otherwise, the self-loop probability dominates the sampling and `ContinuousTimePropagator` should be preferred.
+
+```julia
+propagator = DiscretePropagator(Λ, nBranch) # Λ ≥ max(Hxx(x)) over all reachable configurations x
 ```
