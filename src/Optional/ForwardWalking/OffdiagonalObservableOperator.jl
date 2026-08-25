@@ -18,11 +18,11 @@ end
     offdiagonalObservable(moves::AbstractVector, weightfunc, Hilbert::AbstractHilbertSpace)
 
 Construct a [`LocalOffdiagonalObservable`](@ref) from a list of candidate `moves` (in the same
-dense-vector-per-move format accepted by [`localOperator`](@ref)) and a per-move sampling-weight
+dense-vector-per-move format accepted by `localOperator`) and a per-move sampling-weight
 function `weightfunc(idx, ψratio, x) -> Real`, where `ψratio = ψ(x′)/ψ(x)` is the guiding-function
 ratio for that move.
 
-Unlike [`localOperator`](@ref), this does **not** assert any sign constraint on the resulting
+Unlike `localOperator`, this does **not** assert any sign constraint on the resulting
 weights: `weightfunc` is responsible for returning a non-negative value for every move (this is
 required for the categorical sampling in `sample_and_apply_observable!` to be well-defined). A
 common way to guarantee this for a Hermitian off-diagonal operator is a `cos²` phase weighting
