@@ -378,6 +378,184 @@ end
     end
 end
 
+@testitem "Offdiagonal Observable Operator Tests" begin
+    include("utils.jl")
+    Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
+    logψ = GFMC.EqualWeightSuperposition()
+
+    moves = [
+        Bool[1,0,0],
+        Bool[0,1,0],
+        Bool[0,0,1],
+    ]
+    O = GFMC.offdiagonalObservable(moves, (idx, ψratio, x) -> ψratio, Hilbert)
+
+    config = BosonConfig(Hilbert)
+    Buffer = GFMC.allocate_GWF_buffer(logψ, config)
+    weights = zeros(GFMC.n_moves(O))
+
+    GFMC.get_observable_weights!(weights, config, O, logψ, Hilbert, Buffer)
+
+    @testset "Weights" begin
+        @test GFMC.n_moves(O) == 3
+        @test weights ≈ ones(3)
+    end
+
+    RNG = StableRNG(1234)
+    move, w = GFMC.sample_and_apply_observable!(config, weights, O, RNG)
+
+    @testset "Sampling" begin
+        @test move !== nothing
+        @test w ≈ 3.0
+        @test count(config) == 1
+    end
+
+    @testset "Reproducibility" begin
+        config2 = BosonConfig(Hilbert)
+        Buffer2 = GFMC.allocate_GWF_buffer(logψ, config2)
+        weights2 = zeros(GFMC.n_moves(O))
+        GFMC.get_observable_weights!(weights2, config2, O, logψ, Hilbert, Buffer2)
+
+        RNG2 = StableRNG(1234)
+        move2, w2 = GFMC.sample_and_apply_observable!(config2, weights2, O, RNG2)
+
+        @test config2 == config
+        @test w2 == w
+    end
+end
+
+@testitem "Forward Walking Slot Mechanics" begin
+    include("utils.jl")
+    Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
+    logψ = GFMC.EqualWeightSuperposition()
+
+    moves = [
+        Bool[0,1,1],
+        Bool[0,0,1],
+        Bool[0,1,0],
+        Bool[1,1,0],
+    ]
+    H = localOperator(moves, -[0.5, 0.3, 0.2, 0.4], ZeroDiagOperator(), Hilbert)
+    Observable = GFMC.offdiagonalObservable(moves, (idx, ψratio, x) -> ψratio, Hilbert)
+
+    config = BosonConfig(Hilbert)
+    NWalkers = 4
+    Walkers = GFMC.allocate_walkerEnsemble(config, logψ, NWalkers, H)
+    GFMC.compute_GWF_buffers!(Walkers, logψ)
+
+    CT = ContinuousTimePropagator(1.)
+    mProj = 4
+    cadence = 2
+    n_slots = fld(mProj, cadence) + 1
+    slots = [GFMC.allocate_forward_walking_slot(config, logψ, NWalkers, H) for _ in 1:n_slots]
+    weights_buf = zeros(GFMC.n_moves(Observable))
+    RNG = StableRNG(99)
+
+    @testset "Seeding and advancing" begin
+        @test count(s -> s.active, slots) == 0
+
+        GFMC.seed_from_main_population!(slots[1], Walkers, Observable, logψ, Hilbert, 1, weights_buf, RNG)
+        @test slots[1].active
+        @test slots[1].n_seed == 1
+        @test slots[1].step == 0
+        @test slots[1].cum_weight == 1.0
+        @test isfinite(slots[1].seed_weight)
+
+        for _ in 1:mProj
+            GFMC.advance_slot!(slots[1], CT, logψ, H, Hilbert, 1.0, GFMC.SingleThreaded(), RNG)
+        end
+        @test slots[1].step == mProj
+        @test isfinite(slots[1].cum_weight)
+    end
+
+    @testset "Free slot lookup" begin
+        free1 = GFMC._find_free_slot(slots)
+        @test !free1.active
+        free1.active = true
+
+        free2 = GFMC._find_free_slot(slots)
+        @test !free2.active
+        @test free2 !== free1
+    end
+end
+
+@testitem "Forward Walking Accumulator TFI" begin
+    include("utils.jl")
+    using GreenFunctionMonteCarlo.LinearAlgebra
+
+    σz(n::Bool) = (1 - 2 * n)
+    σz(i, conf::AbstractArray) = σz(conf[i])
+
+    NSites = 2
+    NSteps = 1500
+    m_proj_Basic = 20
+    mProj = 6
+    cadence = 3
+    NWalkers = 2
+
+    RNG = StableRNG(1234)
+
+    Hilbert = BosonHilbertSpace(NSites, HardCoreConstraint())
+    moves = collect(eachcol(Bool.(I(NSites))))
+    offdiagElements = -ones(NSites)
+    Hxx = DiagOperator(x -> sum(σz(i, x) * σz(i + 1, x) for i in eachindex(x)[1:end-1]))
+
+    H = localOperator(moves, offdiagElements, Hxx, Hilbert)
+    # Same moves as H, weight = the bare guiding-function ratio (no extra phase factor): this is
+    # the q=0 structure factor, i.e. Σ_i σx_i.
+    Observable = GFMC.offdiagonalObservable(moves, (idx, ψratio, x) -> ψratio, Hilbert)
+
+    # Exact diagonalization on the 4-state, 2-site Hilbert space, built directly from H's/Observable's
+    # own move and matrix-element definitions (rather than a hand-derived matrix) to avoid a
+    # transcription mismatch with what the simulation actually samples.
+    basis = [BosonConfig(Bool[false,false]), BosonConfig(Bool[false,true]), BosonConfig(Bool[true,false]), BosonConfig(Bool[true,true])]
+    idx_of(x) = findfirst(y -> y == x, basis)
+
+    Hmat = zeros(4,4)
+    Omat = zeros(4,4)
+    for (n,x) in enumerate(basis)
+        Hmat[n,n] = Hxx(x)
+        for i in 1:NSites
+            y = copy(x)
+            GFMC.apply!(y, GFMC.get_move(H, i))
+            Hmat[n, idx_of(y)] += offdiagElements[i]
+
+            y2 = copy(x)
+            GFMC.apply!(y2, GFMC.get_move(Observable, i))
+            Omat[n, idx_of(y2)] += GFMC.observable_weight(Observable, i, 1.0, x)
+        end
+    end
+
+    evals, evecs = eigen(Symmetric(Hmat))
+    ψ0 = evecs[:,1]
+    O_exact = ψ0' * Omat * ψ0
+
+    config = BosonConfig(Hilbert)
+    rand!(RNG, config)
+    logψ = GFMC.EqualWeightSuperposition()
+    CT = ContinuousTimePropagator(0.1)
+
+    prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert)
+
+    outfile = tempname()
+    BObs = GFMC.BasicObserver(outfile, NSteps, NWalkers)
+    BasicAccumulatorFile = GFMC.BasicAccumulator(outfile, m_proj_Basic, NWalkers)
+    FWAcc = GFMC.ForwardWalkingAccumulator(outfile, Observable, BasicAccumulatorFile, config, logψ, H, Hilbert, CT, mProj, cadence, NWalkers; rng = StableRNG(4321))
+
+    Observer = GFMC.CombinedObserver((BObs, BasicAccumulatorFile, FWAcc))
+
+    runGFMC!(prob, Observer, NSteps; rng = RNG)
+
+    estimate = GFMC.get_observable_from_accumulator(FWAcc)[1]
+
+    @testset "Forward walking convergence" begin
+        @test all(isfinite, estimate)
+        # p=mProj (real forward continuation) should be at least as close to the exact ground-state
+        # expectation value as p=0 (seed weight only, the biased mixed estimator).
+        @test abs(estimate[end] - O_exact) <= abs(estimate[1] - O_exact) + 0.2
+    end
+end
+
 include("Jastrow_tests.jl")
 include("parTemp_test.jl")
 @run_package_tests verbose=true
