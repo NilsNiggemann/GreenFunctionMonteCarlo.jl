@@ -35,11 +35,11 @@ end
 DiscretePropagator(Λ::Real, nBranch::Integer, w_avg_estimate::Real) = DiscretePropagator(float(Λ), Int(nBranch), float(w_avg_estimate))
 DiscretePropagator(Λ::Real, nBranch::Integer; w_avg_estimate=1.) = DiscretePropagator(Λ, nBranch, w_avg_estimate)
 
-@inline propagateWalkers!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, propagator::DiscretePropagator, parallelization::AbstractParallelizationScheme, RNG::Random.AbstractRNG = Random.default_rng()) =
-    discrete_time_propagation!(WE, H, logψ, Hilbert, propagator.Λ, propagator.nBranch, propagator.w_avg_estimate, parallelization, RNG)
+@inline propagateWalkers!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, propagator::DiscretePropagator, parallelization::AbstractParallelizationScheme, RNGs::Vector{<:Random.AbstractRNG}) =
+    discrete_time_propagation!(WE, H, logψ, Hilbert, propagator.Λ, propagator.nBranch, propagator.w_avg_estimate, parallelization, RNGs)
 
 """
-    discrete_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, Λ::Real, nBranch::Integer, w_avg_estimate::Real, parallelization::AbstractParallelizationScheme, RNG::Random.AbstractRNG = Random.default_rng())
+    discrete_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, Λ::Real, nBranch::Integer, w_avg_estimate::Real, parallelization::AbstractParallelizationScheme, RNGs::Vector{<:Random.AbstractRNG})
 
 Perform `nBranch` discrete-time Markov sub-steps of branching random walk on a walker ensemble.
 
@@ -52,20 +52,31 @@ Perform `nBranch` discrete-time Markov sub-steps of branching random walk on a w
 - `nBranch::Integer`: The number of Markov sub-steps to perform.
 - `w_avg_estimate::Real`: An estimate of the average branching factor.
 - `parallelization::AbstractParallelizationScheme`: Parallelization settings for the propagation.
-- `RNG::Random.AbstractRNG`: The random number generator to be used (default is `Random.default_rng()`).
+- `RNGs::Vector{<:Random.AbstractRNG}`: A vector of random number generators, one per task (see `duplicate_rng`).
 """
-function discrete_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, Λ::Real, nBranch::Integer, w_avg_estimate::Real, parallelization::MultiThreaded, RNG::Random.AbstractRNG = Random.default_rng())
-    batches = ChunkSplitters.chunks(eachindex(WE), n = parallelization.nTasks, split= ChunkSplitters.RoundRobin())
+function discrete_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, Λ::Real, nBranch::Integer, w_avg_estimate::Real, parallelization::MultiThreaded, RNGs::Vector{<:Random.AbstractRNG})
+    batches = ChunkSplitters.chunks(eachindex(WE), n = num_tasks(parallelization), split= ChunkSplitters.RoundRobin())
 
     @sync for (i_chunk, αinds) in enumerate(batches)
+        rng = RNGs[i_chunk]
+
         Threads.@spawn for α in αinds
-            discrete_time_propagation_walker!(WE, α, H, logψ, Hilbert, Λ, nBranch, w_avg_estimate, RNG)
+            discrete_time_propagation_walker!(WE, α, H, logψ, Hilbert, Λ, nBranch, w_avg_estimate, rng)
         end
     end
 end
-function discrete_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, Λ::Real, nBranch::Integer, w_avg_estimate::Real, parallelization::SingleThreaded, RNG::Random.AbstractRNG = Random.default_rng())
+function discrete_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, Λ::Real, nBranch::Integer, w_avg_estimate::Real, parallelization::BatchMultiThreaded, RNGs::Vector{<:Random.AbstractRNG})
+    αinds = eachindex(WE)
+    Nw = length(αinds)
+    minbatch = clamp(Nw ÷ num_tasks(parallelization), 1, Nw)
+    Polyester.@batch minbatch=minbatch per=thread for α in αinds
+        task_idx = polyester_get_task_local_idx(α, minbatch)
+        discrete_time_propagation_walker!(WE, α, H, logψ, Hilbert, Λ, nBranch, w_avg_estimate, RNGs[task_idx])
+    end
+end
+function discrete_time_propagation!(WE::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, Λ::Real, nBranch::Integer, w_avg_estimate::Real, parallelization::SingleThreaded, RNGs::Vector{<:Random.AbstractRNG})
     for α in eachindex(WE)
-        discrete_time_propagation_walker!(WE, α, H, logψ, Hilbert, Λ, nBranch, w_avg_estimate, RNG)
+        discrete_time_propagation_walker!(WE, α, H, logψ, Hilbert, Λ, nBranch, w_avg_estimate, first(RNGs))
     end
 end
 

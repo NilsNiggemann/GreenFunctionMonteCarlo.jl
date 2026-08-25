@@ -202,7 +202,7 @@ end
     NumWalkers = 8
     ensemble = GFMC.allocate_walkerEnsemble(config,logψ,NumWalkers,H)
 
-    RNG = StableRNG(1234)
+    RNG = [StableRNG(1234)]
     GFMC.propagateWalkers!(ensemble, H, logψ, Hilbert, DT, GFMC.SingleThreaded(),RNG)
 
     @testset "Weights and Energies" begin
@@ -218,7 +218,7 @@ end
 
     @testset "Reproducibility" begin
         ensemble2 = GFMC.allocate_walkerEnsemble(config,logψ,NumWalkers,H)
-        RNG2 = StableRNG(1234)
+        RNG2 = [StableRNG(1234)]
         GFMC.propagateWalkers!(ensemble2, H, logψ, Hilbert, DT, GFMC.SingleThreaded(),RNG2)
 
         @test stack(ensemble2.Configs) == AllConfs
