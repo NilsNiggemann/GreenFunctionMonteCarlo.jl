@@ -5,6 +5,7 @@ A struct representing a diagonal operator `H_xx = 0`
 """
 struct ZeroDiagOperator <: DiagonalOperator end
 (::ZeroDiagOperator)(x::AbstractConfig) = 0.
+(H::DiagonalOperator)(x::AbstractConfig,Hprevious,lastmove) = H(x)
 
 """
     DiagOperator{F} <: DiagonalOperator
@@ -15,6 +16,7 @@ struct DiagOperator{F} <: DiagonalOperator
     f::F
 end
 (F::DiagOperator)(x::AbstractConfig) = F.f(x)
+# (F::DiagOperator)(x::AbstractConfig,Hprevious,lastmove) = F.f(x,Hprevious,lastmove)
 
 """
     OneBodyDiagOperator{T<:AbstractVector} <: DiagonalOperator
@@ -25,7 +27,15 @@ struct OneBodyDiagOperator{T<:AbstractVector} <: DiagonalOperator
     m_i::T
 end
 (Hxx::OneBodyDiagOperator)(x::AbstractConfig) =  LinearAlgebra.dot(Hxx.m_i, x)
-
+function (Hxx::OneBodyDiagOperator)(x::AbstractConfig,Hprevious,lastmove)
+    sites = affected_sites(lastmove)
+    m = Hxx.m_i
+    ΔE = 0.
+    for site in sites
+        ΔE += m[site] * x[site]
+    end
+    return Hprevious + 2ΔE
+end
 """
     TwoBodyDiagOperator{T<:AbstractMatrix} <: DiagonalOperator
 
@@ -36,6 +46,17 @@ struct TwoBodyDiagOperator{T<:AbstractMatrix} <: DiagonalOperator
 end
 (Hxx::TwoBodyDiagOperator)(x::AbstractConfig) =  LinearAlgebra.dot(x,Hxx.v_ij, x)
 
+function (Hxx::TwoBodyDiagOperator)(x::AbstractConfig,Hprevious,lastmove)
+    sites = affected_sites(lastmove)
+    v = Hxx.v_ij
+    ΔE = 0.
+    for i in sites
+        for j in eachindex(x)
+            ΔE += v[i,j] * x[i] * x[j]
+        end
+    end
+    return Hprevious + 2ΔE
+end
 
 struct DiagOperatorSum{T<:Tuple} <: DiagonalOperator
     terms::T
@@ -96,19 +117,21 @@ end
 @inline get_diagonal(O::LocalOperator) = O.diag
 @inline get_offdiagonal_elements(O::LocalOperator) = O.off_diag
 
-isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::HardCoreConstraint) = true
-isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::OccupationNumberConstraint) = true
+@inline isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::HardCoreConstraint) = true
+@inline isapplicable(x::AbstractConfig{Bool}, move::FlipMove, c::OccupationNumberConstraint) = true
+@inline isapplicable(x::AbstractConfig{<:Integer}, move::SparseMove, c::OccupationNumberConstraint) = _isapplicable_occnum(x, move, c.min_occupation, c.max_occupation)
 
-function isapplicable(x::AbstractConfig{<:Integer}, move::SparseMove, c::OccupationNumberConstraint)
+@inline function _isapplicable_occnum(x::AbstractConfig{<:Integer}, move::SparseMove, min_occ, max_occ)
     for (i,site) in enumerate(move.inds)
-        if !(c.min_occupation <= x[site] + move.vals[i] <= c.max_occupation)
+        if !(min_occ <= x[site] + move.vals[i] <= max_occ)
             return false
         end
     end
     return true
 end
+@inline isapplicable(x::AbstractConfig, move::SparseMove, c::HardCoreConstraint) = _isapplicable_occnum(x, move, 0, 1)
 
-_move_type(::LocalOperator{MoveType}) where {MoveType} = MoveType
+@inline _move_type(::LocalOperator{MoveType}) where {MoveType} = MoveType
 
 function localOperator(moves::AbstractVector, off_diag::AbstractVector, diag, H::AbstractHilbertSpace)
     @assert length(moves) == length(off_diag) "Number of moves must match number of Off-diagonal elements"

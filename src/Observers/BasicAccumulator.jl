@@ -60,6 +60,7 @@ end
 set_zero!(A::AbstractArray{T}) where T = fill!(A,zero(T))
 get_num_bins(Observables::BasicAccumulator) = size(Observables.en_numerator,2)
 get_bin_elements(Observables::BasicAccumulator) = Observables.bin_elements
+projection_order(Observables::BasicAccumulator) = size(Observables.Gnps,2) ÷2 
 
 function reset_accumulator!(Observables::BasicAccumulator;hard_reset=true)
     set_zero!(Observables.TotalWeights)

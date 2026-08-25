@@ -185,7 +185,8 @@ const LV_COMPATIBLE_MATRIX = Union{Matrix,SA.SMatrix}
             log_h2 += ssv
         end
     end
-    return log_h + 0.5log_h2
+    ONEHALF = convert(eltype(log_h),0.5)
+    return log_h + ONEHALF*log_h2
 end
 
 @inline function _jastrow_diff_kernel(sites::LV_COMPATIBLE_VECTOR,dx::LV_COMPATIBLE_VECTOR,h_i::LV_COMPATIBLE_VECTOR,vij::LV_COMPATIBLE_MATRIX)
@@ -206,10 +207,12 @@ end
         end
         log_h2 += s1*sumterm
     end
-    return log_h + 0.5log_h2
+    ONEHALF = convert(eltype(log_h),0.5)
+    return log_h + ONEHALF*log_h2
 end
 # slower, generic fallback
 @inline function _jastrow_diff_kernel(sites,dx::AbstractVector{<:Number},h_i,vij)
+
     log_h = zero(eltype(h_i))
 
     @inbounds @simd for idx in eachindex(sites)
@@ -230,5 +233,7 @@ end
         end
         log_h2 += s1*sumterm
     end
-    return log_h + 0.5log_h2
+
+    ONEHALF = convert(eltype(log_h),0.5)
+    return log_h + ONEHALF*log_h2
 end

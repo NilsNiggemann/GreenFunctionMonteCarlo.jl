@@ -169,7 +169,7 @@ end
         @test move_weights == -operator_weights
     end
     
-    RNG = StableRNG(1234)
+    RNG = [StableRNG(1234)]
     GFMC.propagateWalkers!(ensemble, H, logψ, Hilbert, CT, GFMC.SingleThreaded(),RNG)
     
     AllConfs = stack(ensemble.Configs)
@@ -286,8 +286,6 @@ end
     function E_critPoint_exact(L)
         return 1 - csc(pi / (2 * (2 * L + 1)))
     end
-    σz(n::Bool) = (1 - 2 * n)
-    σz(i, conf::AbstractArray) = σz(conf[i])
 
     using GreenFunctionMonteCarlo.LinearAlgebra
     NSites = 2

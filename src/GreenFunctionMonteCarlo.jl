@@ -38,6 +38,7 @@ module GreenFunctionMonteCarlo
     import HDF5
     import Statistics
     import LinearAlgebra
+    import Polyester
     import LoopVectorization
     import ProgressMeter
     import CircularArrays
@@ -52,7 +53,7 @@ module GreenFunctionMonteCarlo
 
     export propagateWalkers!, fulfills_constraint, InverseMove, apply!, get_params
 
-    export SingleThreaded, MultiThreaded
+    export SingleThreaded, MultiThreaded, BatchMultiThreaded
 
     include("Observers/BasicObserver.jl")
     include("Observers/CombinedObserver.jl")
@@ -108,6 +109,9 @@ module GreenFunctionMonteCarlo
     
     include("Observables/OccupationNumber.jl")
     export OccupationNumber
+    
+    include("Observables/SpinCorrelations.jl")
+    export SpinCorrelations, get_matrix_from_tri
 
     include("Observers/BasicAccumulator.jl")
     export BasicAccumulator
@@ -115,6 +119,9 @@ module GreenFunctionMonteCarlo
     include("Observers/ObservableAccumulator.jl")
     export ObservableAccumulator
 
+    include("Observers/LazyObservableAccumulator.jl")
+    export LazyObservableAccumulator
+    
     include("Observers/estimate_weights.jl")
     export estimate_weights_continuousTime!
 
