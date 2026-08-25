@@ -28,12 +28,6 @@ function getLocalEnergy(x::AbstractConfig,H::AbstractSignFreeOperator,logψ::Abs
     return getLocalEnergy(x,weights,Hxx)
 end
 
-# function getLocalEnergy(WE::AbstractWalkerEnsemble,α,Hxx::DiagonalOperator)
-#     Config = getConfig(WE,α)
-#     moveWeights = getMoveWeights(WE,α)
-#     return getLocalEnergy(Config,moveWeights,Hxx)
-# end
-
 function getLocalEnergyWalkers_before(Walkers::AbstractWalkerEnsemble,Hxx::DiagonalOperator)
     num = 0.
     denom = 0.
@@ -47,7 +41,7 @@ function getLocalEnergyWalkers_before(Walkers::AbstractWalkerEnsemble,Hxx::Diago
 end
 
 function performMarkovStep!(x::AbstractConfig,moveWeights::AbstractVector,H::AbstractSignFreeOperator,rng::Random.AbstractRNG)
-    moveidx = StatsBase.sample(rng,StatsBase.Weights(moveWeights))
+    moveidx = sample_fast(rng,moveWeights)
     move = get_move(H,moveidx)
     apply!(x,move)
     return move
@@ -90,12 +84,13 @@ This function performs the GFMC simulation by evolving the walker ensemble using
 - The function modifies the `Walkers` object in place.
 - Ensure that all input objects are properly initialized before calling this function.
 """
-function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,reconfiguration::AbstractReconfigurationScheme,range,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,logger::AbstractLogger,RNG::Random.AbstractRNG)
+function runGFMC!(Walkers::AbstractWalkerEnsemble,Observables::AbstractObserver,reconfiguration::AbstractReconfigurationScheme,range,propagator::AbstractPropagator,logψ::AbstractGuidingFunction,H::AbstractSignFreeOperator,Hilbert::AbstractHilbertSpace,parallelizer::AbstractParallelizationScheme,logger::AbstractLogger,RNGs::Vector{<:Random.AbstractRNG})
     compute_GWF_buffers!(Walkers,logψ)
+    Polyester.reset_threads!()
     for i in range
-        propagateWalkers!(Walkers,H,logψ,Hilbert,propagator,parallelizer,RNG)
+        propagateWalkers!(Walkers,H,logψ,Hilbert,propagator,parallelizer,RNGs)
         saveObservables_before!(Observables,i,Walkers,H,reconfiguration)
-        reconfigurateWalkers!(Walkers,reconfiguration,RNG)
+        reconfigurateWalkers!(Walkers,reconfiguration,parallelizer,RNGs)
         saveObservables_after!(Observables,i,Walkers,H,reconfiguration)
         write_log(logger,i,range,Walkers,Observables,reconfiguration)
     end
@@ -225,8 +220,10 @@ function runGFMC!(prob::GFMCProblem,Observables::AbstractObserver,range;
     if isnothing(logger)
         logger = NoLogger()
     end
-    runGFMC!(prob.Walkers,Observables,reconfiguration,range,Propagator,logψ,H,Hilbert,parallelization,logger,rng)
+    RNGs = duplicate_rng(rng, num_tasks(parallelization))
+    runGFMC!(prob.Walkers,Observables,reconfiguration,range,Propagator,logψ,H,Hilbert,parallelization,logger,RNGs)
 end
+
 
 """
     ProblemEnsemble{P<:AbstractGFMCProblem} <: AbstractGFMCProblem
