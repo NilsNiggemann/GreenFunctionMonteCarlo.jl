@@ -76,6 +76,9 @@ module GreenFunctionMonteCarlo
     include("DefaultFormalism/ContinuousTimePropagator.jl")
     export ContinuousTimePropagator
 
+    include("DefaultFormalism/DiscretePropagator.jl")
+    export DiscretePropagator
+
     include("DefaultFormalism/Evaluation.jl")
     export getEnergies, precomputeNormalizedAccWeight
 
