@@ -1,0 +1,13 @@
+{
+    "folders": [
+        {
+            "path": "../../../../../../../../storage/niggeni/Documents/Projects/Pyrochlore_layers"
+        },
+        {
+            "path": "../../../../../../../../storage/niggeni/.julia_aquana/dev/GreenFunctionMonteCarlo"
+        }
+    ],
+    "settings": {
+        "julia.environmentPath": "/storage/niggeni/Documents/Projects/Pyrochlore_layers/Notebooks/Plotting"
+    }
+}

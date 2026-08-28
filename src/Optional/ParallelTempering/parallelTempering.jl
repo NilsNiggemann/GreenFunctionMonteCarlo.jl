@@ -157,7 +157,7 @@ function swapConfigs!(P::ProblemEnsemble,swap_weights;rng = Random.default_rng()
         for α in 1:Nw
             Weights = @view swap_weights[α,i_prob,:,:]
             Weights_linear = reshape(Weights, length(Weights))
-            new_idx = StatsBase.sample(rng,StatsBase.Weights(Weights_linear))
+            new_idx = sample_fast(rng,Weights_linear)
             
             β,j_prob = Tuple(CartesianIndices(Weights)[new_idx])
             P_j = P.problems[j_prob]

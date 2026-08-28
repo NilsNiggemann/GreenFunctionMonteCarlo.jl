@@ -59,6 +59,8 @@ function ObservableAccumulator(filename,Observable::AbstractObservable,BasicAcc:
     Obs_numerators = maybe_MMap_array(filename,"$(Obs_Name)_numerator",Float64,(NumObs,m_proj,num_bins))
     Obs_denominators = maybe_MMap_array(filename,"$(Obs_Name)_denominator",Float64,(m_proj,num_bins))
 
+    m_values = collect(0:m_proj-1)
+    maybe_write_array(filename,"$(Obs_Name)_m_values", m_values)
     ObsAcc = ObservableAccumulator(BasicAcc,ObsFunc_buffer,Obs_Buffers,Obs_numerators,Obs_denominators)
     return ObsAcc
 end
@@ -113,8 +115,8 @@ Base.@propagate_inbounds function _kernel_compute_ObsAccumBuffers!(Obs_Buffers,c
     ObsFunc!(obs_val,conf)
     Obs_buff_arr = parent(Obs_Buffers)
     i_wrapped = mod1(i,lastindex(Obs_Buffers,3))
-    Base.@boundscheck checkbounds(Obs_buff_arr,:,α,i_wrapped)
-
+    Base.@boundscheck checkbounds(Obs_buff_arr,eachindex(obs_val),α,i_wrapped)
+    #  Obs_buff_arr[:,α,i_wrapped] .= obs_val
     LoopVectorization.@turbo Obs_buff_arr[:,α,i_wrapped] .= obs_val
 end
 
@@ -147,7 +149,7 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
     Nw⁻¹ = 1/Nw
 
     batches = ChunkSplitters.chunks(axes(Obs_numerators,2), n = nThreads,split = ChunkSplitters.RoundRobin())
-
+    # return
     @sync for m_batch in batches
         Threads.@spawn begin
             for m_index in m_batch
@@ -161,7 +163,7 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
                     mult = PopulationMatrix_parent[α,m_index_wrapped]
                     mult == 0 && continue
                     mult *= Nw⁻¹*Gnp
-                    LoopVectorization.@turbo for i in axes(Obs_numerators,1)
+                    LoopVectorization.@tturbo for i in axes(Obs_numerators,1)
                         Obs_numerators[i,m_index,bin_index] += Obs_Buffers_arr[i,α,n_m_wrapped]*mult
                     end
                 end

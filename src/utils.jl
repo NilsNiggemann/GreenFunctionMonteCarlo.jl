@@ -20,6 +20,44 @@ function readMMapArray(filename::AbstractString,datasetname::String)
     end
 end
 
+function maybe_write_array(filename::Nothing,datasetname::String,array)
+    return nothing
+end
+function maybe_write_array(filename::AbstractString,datasetname::String,array)
+    HDF5.h5write(filename,datasetname,array)
+end
 strd(x,args...;kwargs...) = string(round(x,args...;digits = 3,kwargs...))
 
+#=
+    sample_fast(rng, weights) -> Int
 
+Allocation-free categorical sampling. Returns an index sampled proportionally
+to `weights`. Functionally equivalent to
+`StatsBase.sample(rng, StatsBase.Weights(weights))` but avoids heap-allocating
+a `Weights` wrapper object on every call.
+
+This matters especially inside the innermost Monte Carlo loop
+(`performMarkovStep!`) where the per-call allocation would otherwise
+accumulate into significant GC pressure and hurt multi-threaded scaling.
+=#
+@inline function sample_fast(rng::Random.AbstractRNG, weights::AbstractVector)
+    total = sum(weights)
+    u = rand(rng) * total
+    cumulative = zero(total)
+    @inbounds for i in eachindex(weights)
+        cumulative += weights[i]
+        u <= cumulative && return i
+    end
+    return lastindex(weights)  # fallback for floating-point rounding
+end
+
+function duplicate_rng(rng::Random.AbstractRNG, n::Integer)
+    rngs = [copy(rng) for _ in 1:n]
+    for (i, rng) in enumerate(rngs)
+        Random.seed!(rng, i + rand(rng, UInt))
+    end
+    return rngs
+end
+
+# Note: Polyester tasks are sticky so using Threads.threadid() can be used as threadsafe storage.
+polyester_get_task_local_idx(i, minbatch) = Threads.threadid()
