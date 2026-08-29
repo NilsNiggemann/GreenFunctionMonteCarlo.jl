@@ -120,6 +120,22 @@ function minimizeReconfiguration!(list, cloned_walkers::Vector{Int}, dead_walker
     end
     sort!(cloned_walkers)
     sort!(dead_walkers)
+
+    # `list` (== reconfigurationList, later saved verbatim into reconfigurationTable) must keep
+    # recording each walker's TRUE post-reconfiguration source. `_replace_walkers!` only physically
+    # overwrites `dead_walkers` slots (from the independently-sorted `cloned_walkers` pairing below,
+    # which no longer matches the original per-walker sample in `list`), leaving every other slot's
+    # own pre-reconfiguration value untouched -- so `list` must be rewritten to match exactly that:
+    # self-reference for untouched slots, the actual clone source for overwritten ones. Backward
+    # population tracing (getPopulationMatrix!) depends on `list` being an accurate historical
+    # record, not just on the walker ensemble ending up with the statistically-correct population.
+    for α in 1:N
+        list[α] = α
+    end
+    for i in eachindex(dead_walkers, cloned_walkers)
+        list[dead_walkers[i]] = cloned_walkers[i]
+    end
+
     return cloned_walkers, dead_walkers
 end
 

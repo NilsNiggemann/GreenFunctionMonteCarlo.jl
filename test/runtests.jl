@@ -522,6 +522,113 @@ end
     end
 end
 
+@testitem "MinimalReconfiguration records true walker ancestry" begin
+    # Regression test for a bug where minimizeReconfiguration! computed the correct walker
+    # ensemble (statistically) but left reconfigurationList (saved verbatim into
+    # reconfigurationTable) out of sync with the copies actually performed by _replace_walkers!,
+    # silently biasing every diagonal-observable backward-population trace (getPopulationMatrix!)
+    # while leaving getEnergies (which never touches reconfigurationTable) unaffected.
+    include("utils.jl")
+
+    NWalkers = 20
+    # getExampleHardcore uses ZeroDiagOperator() -- with EqualWeightSuperposition, every walker's
+    # branching weight update is then identical regardless of its configuration, so
+    # MinimalReconfiguration is (correctly) a documented no-op and this test would never exercise
+    # any actual copies. getMinimalExample (a real TFI diagonal energy) gives genuine per-walker
+    # weight spread instead.
+    (;Hilbert,H) = getMinimalExample(6, 1.0, 1.0)
+
+    config = BosonConfig(Hilbert)
+    rand!(StableRNG(22), config)
+    logψ = GFMC.EqualWeightSuperposition()
+    CT = ContinuousTimePropagator(0.3)
+    prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert, parallelization = GFMC.SingleThreaded())
+
+    # Propagate a few real steps (no reconfiguration yet) so walker weights become genuinely
+    # unequal -- MinimalReconfiguration is a documented no-op for identical weights, which
+    # wouldn't exercise the copy/ancestry-recording logic this test targets at all.
+    RNGs = [StableRNG(33)]
+    for _ in 1:3
+        GFMC.propagateWalkers!(prob.Walkers, H, logψ, Hilbert, CT, GFMC.SingleThreaded(), RNGs)
+    end
+
+    pre_configs = [copy(GFMC.getConfig(prob.Walkers, α)) for α in 1:NWalkers]
+
+    reconfiguration = GFMC.MinimalReconfiguration(NWalkers)
+    GFMC.reconfigurateWalkers!(prob.Walkers, reconfiguration, GFMC.SingleThreaded(), RNGs)
+    # Sanity check that this scenario actually exercises real branching/death -- otherwise the
+    # test below would trivially pass without ever touching the bug it's meant to catch.
+    @test !isempty(reconfiguration.dead_walkers)
+
+    list = GFMC.get_reconfigurationList(reconfiguration)
+    @testset "reconfigurationList matches actual copies" begin
+        for α in 1:NWalkers
+            @test GFMC.getConfig(prob.Walkers, α) == pre_configs[list[α]]
+        end
+    end
+end
+
+@testitem "TFI L=3 open BC with Jastrow vs exact diagonalization" begin
+    include("utils.jl")
+    using GreenFunctionMonteCarlo.LinearAlgebra
+    using GreenFunctionMonteCarlo.SparseArrays
+
+    L = 3
+    h, J = 0.4, 1.0
+
+    Hilbert = BosonHilbertSpace(L, HardCoreConstraint())
+    moves = [Bool[0 for _ in 1:L] for _ in 1:L]
+    offdiagElements = zeros(Float64, L)
+    for i in eachindex(moves)
+        moves[i][i] = true
+        offdiagElements[i] = -h
+    end
+    Hxx(conf) = -J * sum(σz(i, conf) * σz(i + 1, conf) for i in eachindex(conf)[1:end-1])
+    H = localOperator(moves, offdiagElements, DiagOperator(Hxx), Hilbert)
+
+    # Exact diagonalization reference (open BC; L=3 -> 2^3=8 states, trivial dense construction).
+    # Convention: site 1 is the leftmost/most-significant tensor factor -- this only needs to be
+    # self-consistent between the Hamiltonian and the Sz_i operators below, not matched to any
+    # external convention.
+    id = sparse(1.0I, 2, 2)
+    σxmat = sparse([0.0 1.0; 1.0 0.0])
+    σzmat = sparse([1.0 0.0; 0.0 -1.0])
+    siteop(op, i) = foldl(kron, [k == i ? op : id for k in 1:L])
+    Sz = [siteop(σzmat, i) for i in 1:L]
+    Hmat = -J * sum(Sz[i] * Sz[i+1] for i in 1:(L-1)) - h * sum(siteop(σxmat, i) for i in 1:L)
+    evals, evecs = eigen(Symmetric(Matrix(Hmat)))
+    E0_exact = evals[1]
+    ψ0 = evecs[:, 1]
+    SzSz_exact = [ψ0' * (Sz[i] * Sz[j]) * ψ0 for i in 1:L, j in 1:L]
+
+    # Decent (non-trivial) nearest-neighbor Jastrow guiding function on the hardcore-boson
+    # representation -- EqualWeightSuperposition converges too slowly for a tight test.
+    vij_jastrow = zeros(Float32, L, L)
+    for i in 1:(L-1)
+        vij_jastrow[i, i+1] = vij_jastrow[i+1, i] = 0.5f0
+    end
+    logψ = Jastrow(zeros(Float32, L), vij_jastrow)
+
+    startConfig = BosonConfig(Hilbert)
+    NWalkers = 300
+    NSteps = 3000
+    mProj = 30
+    propagator = ContinuousTimePropagator(0.1)
+
+    problem = GFMCProblem(startConfig, NWalkers, propagator; logψ, H, Hilbert)
+    runGFMC!(problem, NoObserver(), 400; rng = StableRNG(101))
+    ConfObs = ConfigObserver(startConfig, NSteps, NWalkers)
+    runGFMC!(problem, ConfObs, NSteps; rng = StableRNG(202))
+
+    E_gfmc = getEnergies(ConfObs, mProj)[end]
+    @test isapprox(E_gfmc, E0_exact; atol = 0.1)
+
+    SpinCorr = SpinCorrelations(L)
+    SzSz_res = getObs_diagonal(ConfObs, SpinCorr, 1:mProj)
+    SzSz_mat = get_matrix_from_tri(SzSz_res[end], SpinCorr.i_inds, SpinCorr.j_inds)
+    @test all(isapprox.(SzSz_mat, SzSz_exact; atol = 0.05))
+end
+
 include("Jastrow_tests.jl")
 include("parTemp_test.jl")
 @run_package_tests verbose=true
