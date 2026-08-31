@@ -114,10 +114,10 @@ module GreenFunctionMonteCarlo
     export SpinCorrelations, get_matrix_from_tri
 
     include("Observers/BasicAccumulator.jl")
-    export BasicAccumulator
+    export BasicAccumulator, get_energy_from_accumulator_bunching
 
     include("Observers/ObservableAccumulator.jl")
-    export ObservableAccumulator
+    export ObservableAccumulator, get_obs_from_accumulator_bunching
 
     include("Observers/LazyObservableAccumulator.jl")
     export LazyObservableAccumulator

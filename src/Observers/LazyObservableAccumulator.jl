@@ -188,3 +188,14 @@ See also
 - [`SpinCorrelations`](@ref)
 """
 average_obs_walkers(ObsFunc,obs_idx,walker_confs,WalkerPopulations) = error("not implemented for custom observable of type $(typeof(ObsFunc))")
+
+"""
+    get_obs_from_accumulator(Obs::LazyObservableAccumulator, bin_indices::AbstractVector)
+    get_obs_from_accumulator(Obs::LazyObservableAccumulator)
+    get_obs_from_accumulator_bunching(Obs::LazyObservableAccumulator, n_bunch::Integer; kwargs...)
+
+Extract `Obs_numerators`/`Obs_denominators` from `Obs` and forward to the array-based methods defined in [`ObservableAccumulator`](@ref)'s file.
+"""
+get_obs_from_accumulator(Obs::LazyObservableAccumulator,bin_indices::AbstractVector) = get_obs_from_accumulator(Obs.Obs_numerators,Obs.Obs_denominators,bin_indices)
+get_obs_from_accumulator(Obs::LazyObservableAccumulator) = get_obs_from_accumulator(Obs.Obs_numerators,Obs.Obs_denominators)
+get_obs_from_accumulator_bunching(Obs::LazyObservableAccumulator,n_bunch::Integer;kwargs...) = get_obs_from_accumulator_bunching(Obs.Obs_numerators,Obs.Obs_denominators,n_bunch;kwargs...)
