@@ -218,55 +218,75 @@ end
 
 
 """
-    get_energy_from_accumulator_bunching(Observables::BasicAccumulator, n_bunch::Integer; kwargs...)
+    get_energy_from_accumulator(en_numerator::AbstractMatrix, Gnp_denominator::AbstractMatrix, bin_indices::AbstractVector)
 
-Compute the energy by bunching together observable accumulators.
+Compute the energy estimate (at each projection order) obtained from the bins in `bin_indices`, given the raw `en_numerator`/`Gnp_denominator` arrays as accumulated by a [`BasicAccumulator`](@ref) (each shaped `(m_proj, num_bins)`).
 
-# Arguments
-- `Observables::BasicAccumulator`: The accumulator containing observable measurements.
-- `n_bunch::Integer`: The number of bunches to divide the data into for statistical analysis. For no bunching, pass `n_bunch=1`.
-- `kwargs...`: Additional keyword arguments for customization of the chunking process, such as `size` or `split`.
-
-# Returns
-- The computed energy, possibly with statistical error estimates depending on implementation.
-
-# Description
-This function processes the accumulated observables by grouping (bunching) the data into `n_bunch` groups. It then calculates the energy, which can be used for error analysis or to reduce autocorrelation effects in Monte Carlo simulations.
+Averages the two arrays over the given bins (normalized by the mean zero-order denominator to improve numerical precision) and returns their ratio as a vector over projection orders.
 """
-function get_energy_from_accumulator_bunching(Observables::Union{BasicAccumulator,<:NamedTuple},n_bunch::Integer;kwargs...)
-    chunks = ChunkSplitters.chunks(axes(Observables.Gnp_denominator,2), size = n_bunch, split = ChunkSplitters.Consecutive();kwargs...)
-    return [
-        get_energy_from_accumulator(Observables,chunk)
-        for chunk in chunks
-    ]
-end
-    
-"""
-    get_energy_from_accumulator(Obs::Union{BasicAccumulator,<:NamedTuple}, bin_indices::AbstractVector)
+@views function get_energy_from_accumulator(en_numerator::AbstractMatrix,Gnp_denominator::AbstractMatrix,bin_indices::AbstractVector)
+    Normalization = Statistics.mean(Gnp_denominator[1,:])
 
-Compute the energy estimate (at each projection order) obtained from the bins in `bin_indices`.
-
-Averages `Obs.en_numerator` and `Obs.Gnp_denominator` over the given bins (normalized by the mean zero-order denominator to improve numerical precision) and returns their ratio as a vector over projection orders.
-"""
-@views function get_energy_from_accumulator(Obs::Union{BasicAccumulator,<:NamedTuple},bin_indices::AbstractVector)
-    Normalization = Statistics.mean(Obs.Gnp_denominator[1,:])
-
-    En_num = zeros(eltype(Obs.en_numerator),size(Obs.en_numerator,1))
-    Gnp_denom = zeros(eltype(Obs.Gnp_denominator),size(Obs.Gnp_denominator,1))
+    En_num = zeros(eltype(en_numerator),size(en_numerator,1))
+    Gnp_denom = zeros(eltype(Gnp_denominator),size(Gnp_denominator,1))
 
     for bin_idx in bin_indices
-        En_num .+= Obs.en_numerator[:,bin_idx] ./ Normalization
-        Gnp_denom .+= Obs.Gnp_denominator[:,bin_idx] ./ Normalization 
+        En_num .+= en_numerator[:,bin_idx] ./ Normalization
+        Gnp_denom .+= Gnp_denominator[:,bin_idx] ./ Normalization
     end
     En_num ./= Gnp_denom
     return En_num
 end
 """
-    get_energy_from_accumulator(Observables)
+    get_energy_from_accumulator(en_numerator::AbstractMatrix, Gnp_denominator::AbstractMatrix)
 
-Compute the energy estimate for each individual bin of `Observables` separately (i.e. without bunching), returning a vector of per-bin energy vectors.
+Compute the energy estimate for each individual bin separately (i.e. without bunching), returning a vector of per-bin energy vectors.
 """
-get_energy_from_accumulator(Observables) = [get_energy_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
+get_energy_from_accumulator(en_numerator::AbstractMatrix,Gnp_denominator::AbstractMatrix) = [get_energy_from_accumulator(en_numerator,Gnp_denominator,idx:idx) for idx in axes(Gnp_denominator,2)]
+
+"""
+    get_energy_from_accumulator_bunching(en_numerator::AbstractMatrix, Gnp_denominator::AbstractMatrix, n_bunch::Integer; kwargs...)
+
+Compute the energy by bunching together `n_bunch` groups of bins from the raw `en_numerator`/`Gnp_denominator` arrays.
+
+# Arguments
+- `en_numerator`, `Gnp_denominator`: the accumulated numerator/denominator arrays, each shaped `(m_proj, num_bins)`, as accumulated by a [`BasicAccumulator`](@ref).
+- `n_bunch::Integer`: the number of bunches to divide the bins into. For no bunching, pass `n_bunch=1`.
+- `kwargs...`: additional keyword arguments forwarded to `ChunkSplitters.chunks`, such as `size` or `split`.
+
+# Returns
+A vector with one energy estimate (a vector over projection orders) per bunch.
+"""
+function get_energy_from_accumulator_bunching(en_numerator::AbstractMatrix,Gnp_denominator::AbstractMatrix,n_bunch::Integer;kwargs...)
+    chunks = ChunkSplitters.chunks(axes(Gnp_denominator,2), size = n_bunch, split = ChunkSplitters.Consecutive();kwargs...)
+    return [
+        get_energy_from_accumulator(en_numerator,Gnp_denominator,chunk)
+        for chunk in chunks
+    ]
+end
+
+"""
+    get_energy_from_accumulator(Obs::Union{BasicAccumulator,NamedTuple}, bin_indices::AbstractVector)
+    get_energy_from_accumulator(Obs::Union{BasicAccumulator,NamedTuple})
+    get_energy_from_accumulator_bunching(Obs::Union{BasicAccumulator,NamedTuple}, n_bunch::Integer; kwargs...)
+
+Extract `en_numerator`/`Gnp_denominator` from `Obs` — a live [`BasicAccumulator`](@ref), or a `NamedTuple` with fields of the same name (e.g. built from an HDF5 file's `en_numerator`/`Gnp_denominator` datasets) — and forward to the array-based methods above.
+"""
+get_energy_from_accumulator(Obs::Union{BasicAccumulator,NamedTuple},bin_indices::AbstractVector) = get_energy_from_accumulator(Obs.en_numerator,Obs.Gnp_denominator,bin_indices)
+get_energy_from_accumulator(Obs::Union{BasicAccumulator,NamedTuple}) = get_energy_from_accumulator(Obs.en_numerator,Obs.Gnp_denominator)
+get_energy_from_accumulator_bunching(Obs::Union{BasicAccumulator,NamedTuple},n_bunch::Integer;kwargs...) = get_energy_from_accumulator_bunching(Obs.en_numerator,Obs.Gnp_denominator,n_bunch;kwargs...)
+
+"""
+    get_energy_from_accumulator_bunching(filename::AbstractString, n_bunch::Integer; kwargs...)
+
+Read the `en_numerator`/`Gnp_denominator` datasets directly from the HDF5 file written by a [`BasicAccumulator`](@ref) (i.e. constructed as `BasicAccumulator(filename, ...)`), and bunch them into `n_bunch` groups.
+"""
+function get_energy_from_accumulator_bunching(filename::AbstractString,n_bunch::Integer;kwargs...)
+    en_numerator,Gnp_denominator = HDF5.h5open(filename,"r") do file
+        read(file["en_numerator"]),read(file["Gnp_denominator"])
+    end
+    return get_energy_from_accumulator_bunching(en_numerator,Gnp_denominator,n_bunch;kwargs...)
+end
 
 """
     log_observable(O::BasicAccumulator, i)

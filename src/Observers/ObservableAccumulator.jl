@@ -172,40 +172,75 @@ function Obs_Acc_projection!(Observables::ObservableAccumulator,n,Walkers::Abstr
     end
 end
 
-@views function get_obs_from_accumulator(Obs::Union{ObservableAccumulator,NamedTuple},bin_indices::AbstractVector)
-    # Obs_num_slices = Obs.Obs_numerators[:,:,bin_indices]
-    # Obs_denom_slices = Obs.Obs_denominators[:,bin_indices]
+"""
+    get_obs_from_accumulator(Obs_numerators::AbstractArray{<:Any,3}, Obs_denominators::AbstractMatrix, bin_indices::AbstractVector)
 
-    Normalization = Statistics.mean(Obs.Obs_denominators[1,:])
+Compute the observable estimate (at each projection order) obtained from the bins in `bin_indices`, given the raw `Obs_numerators`/`Obs_denominators` arrays as accumulated by an [`ObservableAccumulator`](@ref) or [`LazyObservableAccumulator`](@ref) (shaped `(NumObs, num_proj, num_bins)` and `(num_proj, num_bins)` respectively).
 
-    Obs_num = zeros(eltype(Obs.Obs_numerators),size(Obs.Obs_numerators,1),size(Obs.Obs_numerators,2))
-    Obs_denom = zeros(eltype(Obs.Obs_denominators),size(Obs.Obs_denominators,1))
+Averages the two arrays over the given bins (normalized by the mean zero-order denominator to improve numerical precision) and returns their ratio.
+"""
+@views function get_obs_from_accumulator(Obs_numerators::AbstractArray{<:Any,3},Obs_denominators::AbstractMatrix,bin_indices::AbstractVector)
+    Normalization = Statistics.mean(Obs_denominators[1,:])
+
+    Obs_num = zeros(eltype(Obs_numerators),size(Obs_numerators,1),size(Obs_numerators,2))
+    Obs_denom = zeros(eltype(Obs_denominators),size(Obs_denominators,1))
 
     for bin_idx in bin_indices
-        Obs_num .+= Obs.Obs_numerators[:,:,bin_idx] ./ Normalization
-        Obs_denom .+= Obs.Obs_denominators[:,bin_idx] ./ Normalization 
+        Obs_num .+= Obs_numerators[:,:,bin_idx] ./ Normalization
+        Obs_denom .+= Obs_denominators[:,bin_idx] ./ Normalization
     end
     Obs_num ./= Obs_denom'
     return Obs_num
 end
-get_obs_from_accumulator(Observables::Union{ObservableAccumulator,NamedTuple}) = [get_obs_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
 """
-    get_obs_from_accumulator_bunching(Observables::Union{ObservableAccumulator,NamedTuple}, n_bunch::Integer; kwargs...)
+    get_obs_from_accumulator(Obs_numerators::AbstractArray{<:Any,3}, Obs_denominators::AbstractMatrix)
 
-Compute the observable estimates by bunching together observable accumulators.
+Compute the observable estimate for each individual bin separately (i.e. without bunching), returning a vector of per-bin estimates.
+"""
+get_obs_from_accumulator(Obs_numerators::AbstractArray{<:Any,3},Obs_denominators::AbstractMatrix) = [get_obs_from_accumulator(Obs_numerators,Obs_denominators,idx:idx) for idx in axes(Obs_denominators,2)]
+
+"""
+    get_obs_from_accumulator_bunching(Obs_numerators::AbstractArray{<:Any,3}, Obs_denominators::AbstractMatrix, n_bunch::Integer; kwargs...)
+
+Compute the observable estimates by bunching together `n_bunch` groups of bins from the raw `Obs_numerators`/`Obs_denominators` arrays.
 
 # Arguments
-- `Observables::Union{ObservableAccumulator,NamedTuple}`: The accumulator containing observable measurements.
+- `Obs_numerators`, `Obs_denominators`: the accumulated numerator/denominator arrays, as accumulated by an [`ObservableAccumulator`](@ref) or [`LazyObservableAccumulator`](@ref).
 - `n_bunch::Integer`: The number of bunches to divide the data into for statistical analysis. For no bunching, pass `n_bunch=1`.
 - `kwargs...`: Additional keyword arguments for customization of the chunking process, such as `size` or `split`.
 
 # Returns
 - A vector of observable estimates (at each projection order), one per bunch, which can be used for error analysis or to reduce autocorrelation effects in Monte Carlo simulations.
 """
-function get_obs_from_accumulator_bunching(Observables::Union{ObservableAccumulator,NamedTuple},n_bunch::Integer;kwargs...)
-    chunks = ChunkSplitters.chunks(axes(Observables.Obs_denominators,2), size = n_bunch, split = ChunkSplitters.Consecutive();kwargs...)
+function get_obs_from_accumulator_bunching(Obs_numerators::AbstractArray{<:Any,3},Obs_denominators::AbstractMatrix,n_bunch::Integer;kwargs...)
+    chunks = ChunkSplitters.chunks(axes(Obs_denominators,2), size = n_bunch, split = ChunkSplitters.Consecutive();kwargs...)
     return [
-        get_obs_from_accumulator(Observables,chunk)
+        get_obs_from_accumulator(Obs_numerators,Obs_denominators,chunk)
         for chunk in chunks
     ]
+end
+
+"""
+    get_obs_from_accumulator(Obs::Union{ObservableAccumulator,NamedTuple}, bin_indices::AbstractVector)
+    get_obs_from_accumulator(Obs::Union{ObservableAccumulator,NamedTuple})
+    get_obs_from_accumulator_bunching(Obs::Union{ObservableAccumulator,NamedTuple}, n_bunch::Integer; kwargs...)
+
+Extract `Obs_numerators`/`Obs_denominators` from `Obs` — a live [`ObservableAccumulator`](@ref), or a `NamedTuple` with fields of the same name (e.g. built from an HDF5 file's `<Obs_Name>_numerator`/`<Obs_Name>_denominator` datasets) — and forward to the array-based methods above.
+
+See also [`LazyObservableAccumulator`](@ref), which provides the same methods for its own type.
+"""
+get_obs_from_accumulator(Obs::Union{ObservableAccumulator,NamedTuple},bin_indices::AbstractVector) = get_obs_from_accumulator(Obs.Obs_numerators,Obs.Obs_denominators,bin_indices)
+get_obs_from_accumulator(Obs::Union{ObservableAccumulator,NamedTuple}) = get_obs_from_accumulator(Obs.Obs_numerators,Obs.Obs_denominators)
+get_obs_from_accumulator_bunching(Obs::Union{ObservableAccumulator,NamedTuple},n_bunch::Integer;kwargs...) = get_obs_from_accumulator_bunching(Obs.Obs_numerators,Obs.Obs_denominators,n_bunch;kwargs...)
+
+"""
+    get_obs_from_accumulator_bunching(filename::AbstractString, Obs_Name::AbstractString, n_bunch::Integer; kwargs...)
+
+Read the `\$(Obs_Name)_numerator`/`\$(Obs_Name)_denominator` datasets directly from the HDF5 file written by an [`ObservableAccumulator`](@ref) or [`LazyObservableAccumulator`](@ref) (`Obs_Name` defaults to the observable type's name, see their constructors), and bunch them into `n_bunch` groups.
+"""
+function get_obs_from_accumulator_bunching(filename::AbstractString,Obs_Name::AbstractString,n_bunch::Integer;kwargs...)
+    Obs_numerators,Obs_denominators = HDF5.h5open(filename,"r") do file
+        read(file["$(Obs_Name)_numerator"]),read(file["$(Obs_Name)_denominator"])
+    end
+    return get_obs_from_accumulator_bunching(Obs_numerators,Obs_denominators,n_bunch;kwargs...)
 end
