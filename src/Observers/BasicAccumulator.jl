@@ -10,6 +10,17 @@ A basic observer struct for accumulating measurements in Monte Carlo simulations
 A structure that represents a basic accumulator for observing
 energy and weights during simulations. Instead of storing observables at each step, the expectation values are computed on the fly, reducing the storage requirements significantly. Note that it is advisable to use a good guess of the average weight in the propagator to reduce numerical precision loss.
 
+# Fields
+- `TotalWeights`: Circular buffer of the total (normalized) walker weight at each recent step, indexed by propagation step `n`.
+- `energies`: Circular buffer of the local energy estimator at each recent step.
+- `Gnps`: Circular buffer holding the `Gnp[n,p]` products used to reweight energies accumulated over `p` projection steps starting from step `n`.
+- `reconfigurationTable`: Circular buffer recording, for each walker and recent step, the index of the ancestor it was reconfigured from.
+- `PopulationMatrix`: Circular buffer of walker population/survival information per projection order.
+- `en_numerator`: Per-bin running numerator of the energy estimator, one row per projection order `p`.
+- `Gnp_denominator`: Per-bin running denominator (normalization) matching `en_numerator`.
+- `weight_normalization`: Scalar (0-dimensional array) normalization factor applied to `TotalWeights` to improve floating point precision.
+- `bin_elements`: Number of simulation steps accumulated into a single bin before moving on to the next one.
+
 # See Also
 - [`AbstractObserver`](@ref)
 """
@@ -37,6 +48,8 @@ Create a `BasicAccumulator` object for accumulating observables in a Green Funct
 
 # Keyword Arguments
 - `weight_normalization`: (default = 1.0) A normalization factor applied to the weights of the walkers. Only used to improve floating point precision.
+- `num_bins`: (default = 1) The number of bins over which the accumulated energy numerator/denominator are stored separately, e.g. for error estimation via bunching.
+- `bin_elements`: (default = `typemax(Int)`) The number of simulation steps accumulated into each bin before subsequent steps are assigned to the next bin.
 
 # Returns
 A `BasicAccumulator` instance configured with the specified parameters.
@@ -57,11 +70,45 @@ function BasicAccumulator(filename,m_proj::Integer,NWalkers::Integer;weight_norm
 
     return BasicAccumulator(TotalWeights,energies,Gnps,reconfigurationTable,PopulationMatrix,en_numerator,Gnp_denominator,weight_normalization_arr,bin_elements)
 end
-set_zero!(A::AbstractArray{T}) where T = fill!(A,zero(T))
-get_num_bins(Observables::BasicAccumulator) = size(Observables.en_numerator,2)
-get_bin_elements(Observables::BasicAccumulator) = Observables.bin_elements
-projection_order(Observables::BasicAccumulator) = size(Observables.Gnps,2) ÷2 
+BasicAccumulator(m_proj::Integer,NWalkers::Integer;kwargs...) = BasicAccumulator(nothing,m_proj,NWalkers;kwargs...)
 
+"""
+    set_zero!(A::AbstractArray)
+
+Fill the array `A` in place with zeros of its element type.
+"""
+set_zero!(A::AbstractArray{T}) where T = fill!(A,zero(T))
+
+"""
+    get_num_bins(Observables::BasicAccumulator)
+
+Return the number of bins used by `Observables` to accumulate the energy numerator and denominator.
+"""
+get_num_bins(Observables::BasicAccumulator) = size(Observables.en_numerator,2)
+
+"""
+    get_bin_elements(Observables::BasicAccumulator)
+
+Return the number of simulation steps accumulated into each bin of `Observables`.
+"""
+get_bin_elements(Observables::BasicAccumulator) = Observables.bin_elements
+
+"""
+    projection_order(Observables::BasicAccumulator)
+
+Return the maximal projection order `m_proj` that `Observables` was configured with.
+"""
+projection_order(Observables::BasicAccumulator) = size(Observables.Gnps,2) ÷2
+
+"""
+    reset_accumulator!(Observables::BasicAccumulator; hard_reset=true)
+
+Reset the circular buffers of `Observables` (weights, energies, `Gnps`, reconfiguration and population tables) to zero.
+
+If `hard_reset=true` (the default), also zero out the accumulated `en_numerator` and `Gnp_denominator`, discarding all previously accumulated statistics. Pass `hard_reset=false` to only reset the per-step circular buffers while keeping the running energy accumulation intact.
+
+Returns `Observables`.
+"""
 function reset_accumulator!(Observables::BasicAccumulator;hard_reset=true)
     set_zero!(Observables.TotalWeights)
     set_zero!(Observables.energies)
@@ -75,8 +122,14 @@ function reset_accumulator!(Observables::BasicAccumulator;hard_reset=true)
     return Observables
 end
 
-BasicAccumulator(m_proj::Integer,NWalkers::Integer;kwargs...) = BasicAccumulator(nothing,m_proj,NWalkers;kwargs...)
+"""
+    get_bin_index(n, num_bins, bin_elements)
+    get_bin_index(n, Observables::BasicAccumulator)
 
+Compute the bin index that simulation step `n` (1-based) belongs to, given `bin_elements` steps per bin.
+
+If the computed index would exceed `num_bins`, a warning is issued (once) and the last bin index is returned instead, so that later steps are folded into the final bin rather than causing an out-of-bounds access.
+"""
 function get_bin_index(n,num_bins,bin_elements)
     n < 1 && throw(ArgumentError("n must be greater than or equal to 1 but got n = $n"))
     n_bin_index = (n-1) ÷ bin_elements + 1
@@ -88,6 +141,13 @@ function get_bin_index(n,num_bins,bin_elements)
 end
 get_bin_index(n,Observables::BasicAccumulator) = get_bin_index(n,get_num_bins(Observables),get_bin_elements(Observables))
 
+"""
+    saveObservables_before!(Observables::BasicAccumulator, n, Walkers, H, reconfiguration)
+
+Update `Observables` with the measurements for propagation step `n`, to be called before the walkers are reconfigured/propagated to step `n+1`.
+
+Updates the local energy and total weight at step `n`, propagates the `Gnp` reweighting factors, and accumulates the energy numerator and `Gnp` denominator into the appropriate bin (as determined by [`get_bin_index`](@ref)).
+"""
 function saveObservables_before!(Observables::BasicAccumulator,n,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
     Hxx = get_diagonal(H)
     energies = Observables.energies
@@ -107,6 +167,13 @@ function saveObservables_before!(Observables::BasicAccumulator,n,Walkers::Abstra
     return nothing
 end
 
+"""
+    getEnergy_step!(en_numerator, Gnp_denominator, Gnp, localEnergies, n, NSites)
+
+Accumulate the contribution of step `n` into `en_numerator` and `Gnp_denominator`, for every projection order `p < n`.
+
+For each valid `p`, adds `Gnp[n,p] * localEnergies[n] / NSites` to `en_numerator[p]` and `Gnp[n,p]` to `Gnp_denominator[p]`, so that `en_numerator ./ Gnp_denominator` estimates the (mixed) energy per site at projection order `p`.
+"""
 function getEnergy_step!(en_numerator::AbstractVector,Gnp_denominator::AbstractVector,Gnp::CircularArrays.CircularMatrix,localEnergies::AbstractVector,n::Integer,NSites::Integer)
     Nsites⁻¹ = 1/NSites
     for p in eachindex(en_numerator)
@@ -117,6 +184,13 @@ function getEnergy_step!(en_numerator::AbstractVector,Gnp_denominator::AbstractV
     return en_numerator
 end
 
+"""
+    updateGnp!(Gnp, TotalWeights, n)
+
+Update column `n` of the circular matrix `Gnp` with the reweighting factors accumulated over `p` projection steps ending at step `n`.
+
+`Gnp[n,1]` records whether the weight at step `n` is positive, `Gnp[n,2]` stores the total weight at step `n`, and for `p >= 3`, `Gnp[n,p] = Gnp[n-1,p-1] * Gnp[n,2]` recursively accumulates the product of weights over the last `p-1` steps.
+"""
 function updateGnp!(Gnp,TotalWeights,n)
     nMax,pMax = size(Gnp)
     Gnp[n,1] = TotalWeights[n]>0 #zero projection order
@@ -132,6 +206,11 @@ function updateGnp!(Gnp,TotalWeights,n)
     return
 end
 
+"""
+    saveObservables_after!(Observables::BasicAccumulator, i, Walkers, H, reconfiguration)
+
+Update `Observables` after walkers have been reconfigured at step `i`, storing the resulting reconfiguration (ancestry) list in `Observables.reconfigurationTable[:,i]`.
+"""
 function saveObservables_after!(Observables::BasicAccumulator,i,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
     Observables.reconfigurationTable[:,i] .= get_reconfigurationList(reconfiguration)
     return nothing
@@ -162,6 +241,13 @@ function get_energy_from_accumulator_bunching(Observables::Union{BasicAccumulato
     ]
 end
     
+"""
+    get_energy_from_accumulator(Obs::Union{BasicAccumulator,<:NamedTuple}, bin_indices::AbstractVector)
+
+Compute the energy estimate (at each projection order) obtained from the bins in `bin_indices`.
+
+Averages `Obs.en_numerator` and `Obs.Gnp_denominator` over the given bins (normalized by the mean zero-order denominator to improve numerical precision) and returns their ratio as a vector over projection orders.
+"""
 @views function get_energy_from_accumulator(Obs::Union{BasicAccumulator,<:NamedTuple},bin_indices::AbstractVector)
     Normalization = Statistics.mean(Obs.Gnp_denominator[1,:])
 
@@ -175,8 +261,32 @@ end
     En_num ./= Gnp_denom
     return En_num
 end
+"""
+    get_energy_from_accumulator(Observables)
+
+Compute the energy estimate for each individual bin of `Observables` separately (i.e. without bunching), returning a vector of per-bin energy vectors.
+"""
 get_energy_from_accumulator(Observables) = [get_energy_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
 
+"""
+    log_observable(O::BasicAccumulator, i)
+
+Return the tuple of log entries reported for step `i`: the walker survival ratio, the local energy, and the average weight.
+
+Used to populate progress/log output during a simulation run.
+"""
 log_observable(O::BasicAccumulator,i) = (log_walker_survival_ratio(O.reconfigurationTable,i),log_Obs_energy(O,i),log_Obs_weights(O,i))
+
+"""
+    log_Obs_energy(O::BasicAccumulator, i)
+
+Return a `("eloc", value)` pair with the local energy at step `i`, formatted for logging.
+"""
 log_Obs_energy(O::BasicAccumulator,i) = ("eloc",strd(O.energies[i]))
+
+"""
+    log_Obs_weights(O::BasicAccumulator, i)
+
+Return a `("w_avg", value)` pair with the total walker weight at step `i`, formatted for logging.
+"""
 log_Obs_weights(O::BasicAccumulator,i) = ("w_avg",strd(O.TotalWeights[i]))

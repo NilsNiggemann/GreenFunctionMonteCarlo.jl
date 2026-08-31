@@ -189,6 +189,19 @@ end
     return Obs_num
 end
 get_obs_from_accumulator(Observables::Union{ObservableAccumulator,NamedTuple}) = [get_obs_from_accumulator(Observables,idx:idx) for idx in axes(Observables.Obs_denominators,2)]
+"""
+    get_obs_from_accumulator_bunching(Observables::Union{ObservableAccumulator,NamedTuple}, n_bunch::Integer; kwargs...)
+
+Compute the observable estimates by bunching together observable accumulators.
+
+# Arguments
+- `Observables::Union{ObservableAccumulator,NamedTuple}`: The accumulator containing observable measurements.
+- `n_bunch::Integer`: The number of bunches to divide the data into for statistical analysis. For no bunching, pass `n_bunch=1`.
+- `kwargs...`: Additional keyword arguments for customization of the chunking process, such as `size` or `split`.
+
+# Returns
+- A vector of observable estimates (at each projection order), one per bunch, which can be used for error analysis or to reduce autocorrelation effects in Monte Carlo simulations.
+"""
 function get_obs_from_accumulator_bunching(Observables::Union{ObservableAccumulator,NamedTuple},n_bunch::Integer;kwargs...)
     chunks = ChunkSplitters.chunks(axes(Observables.Obs_denominators,2), size = n_bunch, split = ChunkSplitters.Consecutive();kwargs...)
     return [

@@ -1,3 +1,7 @@
+```@meta
+CurrentModule = GreenFunctionMonteCarlo
+```
+
 # Example: 1D Transverse Field Ising Model
 
 ## Defining the Hamiltonian
@@ -153,19 +157,7 @@ let
 end
 ```
 !!! tip
-    There is already an efficient implementation of the Jastrow function. Simply use it as:
-    ```
-    vij_jastrow = zeros(Float32,lattice_size,lattice_size)
-    for i in axes(vij_jastrow, 1)[1:end-1]
-        vij_jastrow[i,i+1]=vij_jastrow[i+1,i] = 0.5
-    end
-
-    logψJastrow = Jastrow(
-        zeros(Float32,lattice_size),
-        vij_jastrow,
-    )
-    ```
-    It is advised to use variational Monte Carlo to optimize a variational wavefunction before using it in GFMC. A particularly useful package is [Netket](https://netket.readthedocs.io/en/stable/), which may be called from Julia via [PyCall](https://github.com/JuliaPy/PyCall.jl).
+    There is already an efficient implementation of the Jastrow function, used in the [Accumulating Observables On-The-Fly](@ref) section below. It is advised to use variational Monte Carlo to optimize a variational wavefunction before using it in GFMC. A particularly useful package is [Netket](https://netket.readthedocs.io/en/stable/), which may be called from Julia via [PyCall](https://github.com/JuliaPy/PyCall.jl).
 
 
 ## Observables diagonal in the computational basis
@@ -217,19 +209,122 @@ mean_TotalWeights, w_avg_estimate = GFMC.estimate_weights_continuousTime!(proble
 
 The set of accumulators is combined into a single `CombinedObserver`, so that each of them is updated at every observation step. `BasicAccumulator` provides the buffers shared by all `LazyObservableAccumulator`s, and stores the energy itself.
 
-```julia
-outfile = "observables.h5"
-NSteps_total = 2000  # total number of simulation steps
-num_bins = 32         # number of bins used for the accumulation (see "Advanced Usage" for error estimation via binning)
-projection_values = 0:5:mProj-1 # imaginary-time projections at which the observables are stored; storing fewer steps is cheaper
+!!! tip
+    While the approach above is very convenient, for big simulations, it may not be feasible to store all configurations as the output file may become too large. For this case, it is also possible to use accumulators, such as [`BasicAccumulator`](@ref) and [`LazyObservableAccumulator`](@ref). Accumulators compute the imaginary time projection of the observable at every step of the simulation, thereby saving a lot of storage. `BasicAccumulator` contains all the essential information to allow for projection during the run, while `LazyObservableAccumulator` may be used to compute observables. 
+    To combine several accumulators, you can use `CombinedObserver`. The following section shows this in practice.
 
-BAcc = BasicAccumulator(outfile, mProj, NWalkers; weight_normalization = mean_TotalWeights, num_bins, bin_elements = NSteps_total ÷ num_bins + 1)
-OccNum_Acc = LazyObservableAccumulator(outfile, BosonConfig(Hilbert), OccupationNumber(lattice_size), BAcc, projection_values, NWalkers, Threads.nthreads())
-SpinCorr_Acc = LazyObservableAccumulator(outfile, BosonConfig(Hilbert), SpinCorrelations(lattice_size), BAcc, projection_values, NWalkers, Threads.nthreads())
-Observer = CombinedObserver((BAcc, OccNum_Acc, SpinCorr_Acc))
+## Accumulating Observables On-The-Fly
 
-CT = ContinuousTimePropagator(dtau, w_avg_estimate) # use the estimated average weight to reduce numerical error
-runGFMC!(problem, Observer, NSteps_total; Propagator = CT, parallelization)
+For longer simulations, storing the full configuration at every step (as `ConfigObserver` does) becomes wasteful once you only care about a handful of expectation values. Instead, [`BasicAccumulator`](@ref) and [`LazyObservableAccumulator`](@ref) accumulate the imaginary-time projection of each observable step by step and write directly to an HDF5 file, so the memory and storage footprint no longer grows with the number of steps. This comes at the cost of having to fix the maximum projection depth `m_proj` before running the simulation. See [Advanced Usage](Advanced.md) for a more detailed discussion, including numerical stability caveats and the buffered [`ObservableAccumulator`](@ref).
+
+We reuse the `Hilbert`, `H` and `logψ` (short-range Jastrow) already defined above, but this time with `NWalkers = 10` and a fixed number of bins, so that we can later estimate error bars.
+```@example TFI
+using GreenFunctionMonteCarlo.HDF5
+
+function adjust_NSteps_for_bins(NSteps, num_bins)
+    bin_elements = NSteps ÷ num_bins + 1
+    return num_bins * bin_elements - 1
+end
+
+NWalkers      = 10
+m_proj        = 40   # maximal projection order used by BasicAccumulator/LazyObservableAccumulator
+obs_projection_stepsize = 2 # skip every other projection step for the (cheaper) observables
+num_bins      = 32   # number of bins used for the accumulation, e.g. for error estimation via binning
+NSteps        = adjust_NSteps_for_bins(500, num_bins)
+outfile       = tempname() * ".h5" # accumulators write their running sums directly to this file
+nothing # hide
 ```
 
-After the run, the numerators and denominators for each observable are available both on the accumulators themselves and in `outfile` (HDF5). See [Advanced Usage](Advanced.md) for how to bin the data, estimate error bars, and read it back from disk, as well as for the buffered [`ObservableAccumulator`](@ref) — a middle ground that keeps observable buffers in memory across a few projection steps, at extra memory cost, to avoid recomputing expensive observables.
+The `BasicAccumulator` stores the running numerator/denominator of the energy estimator, split into `num_bins` bins. `LazyObservableAccumulator` reuses this bookkeeping to accumulate further observables; here we measure the occupation numbers and the spin-spin correlations. Both accumulators are packed into a `CombinedObserver`, which updates each of them at every observation step; `BasicAcc` must come first, since the other accumulators read its internal buffers.
+```@example TFI
+BasicAcc = BasicAccumulator(outfile, m_proj, NWalkers; num_bins, bin_elements = NSteps ÷ num_bins + 1)
+
+OccNum = OccupationNumber(lattice_size)
+SpinCorr = SpinCorrelations(lattice_size)
+projection_values = 0:obs_projection_stepsize:(m_proj-1)
+OccNumAcc = LazyObservableAccumulator(outfile, startConfig, OccNum, BasicAcc, projection_values, NWalkers, 1)
+SSAcc = LazyObservableAccumulator(outfile, startConfig, SpinCorr, BasicAcc, projection_values, NWalkers, 1)
+
+Observer = CombinedObserver((BasicAcc, OccNumAcc, SSAcc))
+
+problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert)
+runGFMC!(problem, NoObserver(), NStepsEquil)
+runGFMC!(problem, Observer, NSteps)
+nothing # hide
+```
+
+### Reading the results back from the HDF5 file
+
+Once the simulation is done, the accumulated numerators and denominators live in `outfile`. As described in [Advanced Usage](Advanced.md), the recommended way to post-process them is to read them back from the file (rather than reaching into the live accumulator objects) and bin them together, using [`get_energy_from_accumulator_bunching`](@ref) and [`get_obs_from_accumulator_bunching`](@ref):
+```@example TFI
+function readObs(file, bunching)
+    BasicAccMock = (; en_numerator = h5read(file, "en_numerator"), Gnp_denominator = h5read(file, "Gnp_denominator"))
+    Energy = get_energy_from_accumulator_bunching(BasicAccMock, bunching)
+
+    OccNumMock = (; Obs_numerators = h5read(file, "OccupationNumber_numerator"), Obs_denominators = h5read(file, "OccupationNumber_denominator"))
+    OccupationNumbers = get_obs_from_accumulator_bunching(OccNumMock, bunching)
+
+    SzSzMock = (; Obs_numerators = h5read(file, "SpinCorrelations_numerator"), Obs_denominators = h5read(file, "SpinCorrelations_denominator"))
+    SzSz = get_obs_from_accumulator_bunching(SzSzMock, bunching)
+
+    m_values = h5read(file, "OccupationNumber_m_values")
+    return (; Energy, OccupationNumbers, SzSz, m_values)
+end
+
+bunching = num_bins ÷ 8 # bin the num_bins accumulated bins down to a handful of groups for error bars
+Obs = readObs(outfile, bunching)
+nothing # hide
+```
+`Obs.Energy`, `Obs.OccupationNumbers` and `Obs.SzSz` are each vectors with one entry per (bunched) bin, which we can average over to get the expectation values together with an error estimate.
+```@example TFI
+tau_energy = (0:m_proj-1) .* dtau
+energy_mean = mean(Obs.Energy) .* lattice_size
+energy_std = std(Obs.Energy) .* lattice_size
+
+let
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel = L"$τ$ (imaginary time)", ylabel = L"Energy$$")
+
+    lines!(ax, tau_energy, energy_mean, label = L"GFMC$$")
+    band!(ax, tau_energy, energy_mean .- energy_std, energy_mean .+ energy_std, color = (:blue, 0.2))
+    hlines!(ax, E_critPoint_exact(lattice_size, h, periodic), color = :black, linestyle = :dash, label = L"Exact$$")
+
+    axislegend(ax, position = :rt)
+    fig
+end
+```
+```@example TFI
+n_mean = mean(Obs.OccupationNumbers)
+n_std = std(Obs.OccupationNumbers)
+tau_obs = collect(projection_values) .* dtau
+
+let
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel = L"$τ$ (imaginary time)", ylabel = L"$\langle n_j \rangle$")
+    for j in 1:lattice_size
+        lines!(ax, tau_obs, n_mean[j, :], label = L"j=%$j")
+        band!(ax, tau_obs, n_mean[j, :] .- n_std[j, :], n_mean[j, :] .+ n_std[j, :], alpha = 0.2)
+    end
+    axislegend(ax, position = :rt)
+    fig
+end
+```
+```@example TFI
+S1j_inds = findall(==(1), SpinCorr.i_inds)   # rows for pairs (1,j), ordered j = 1..lattice_size
+SzSz_mean = mean(Obs.SzSz)[S1j_inds, :]
+SzSz_std = std(Obs.SzSz)[S1j_inds, :]
+
+let
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel = L"$τ$ (imaginary time)", ylabel = L"$\langle S_1^z S_j^z \rangle$")
+    for j in 1:lattice_size
+        lines!(ax, tau_obs, SzSz_mean[j, :], label = L"j=%$j")
+        band!(ax, tau_obs, SzSz_mean[j, :] .- SzSz_std[j, :], SzSz_mean[j, :] .+ SzSz_std[j, :], alpha = 0.2)
+    end
+    axislegend(ax, position = :rt)
+    fig
+end
+```
+
+!!! note
+    Here we only bin the `num_bins` accumulated bins down once, with a single `bunching` value, to get *some* error estimate. For a real production run, you should instead check that this error estimate is stable as the bunching size grows (i.e. that the bins are sufficiently decorrelated) before trusting it — see the warning in the "Example evaluation" section of [Advanced Usage](Advanced.md).
