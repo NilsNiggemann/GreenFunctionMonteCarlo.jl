@@ -204,7 +204,7 @@ NWalkers = 10
 parallelization = BatchMultiThreaded(Threads.nthreads())
 problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert, parallelization)
 
-mean_TotalWeights, w_avg_estimate = GFMC.estimate_weights_continuousTime!(problem; Nepochs=4, Nsamples=1000, verbose=true, logger=nothing)
+mean_TotalWeights, w_avg_estimate = estimate_weights_continuousTime!(problem; Nepochs=4, Nsamples=1000, verbose=true, logger=nothing)
 ```
 
 The set of accumulators is combined into a single `CombinedObserver`, so that each of them is updated at every observation step. `BasicAccumulator` provides the buffers shared by all `LazyObservableAccumulator`s, and stores the energy itself.
@@ -237,7 +237,11 @@ nothing # hide
 
 The `BasicAccumulator` stores the running numerator/denominator of the energy estimator, split into `num_bins` bins. `LazyObservableAccumulator` reuses this bookkeeping to accumulate further observables; here we measure the occupation numbers and the spin-spin correlations. Both accumulators are packed into a `CombinedObserver`, which updates each of them at every observation step; `BasicAcc` must come first, since the other accumulators read its internal buffers.
 ```@example TFI
-BasicAcc = BasicAccumulator(outfile, m_proj, NWalkers; num_bins, bin_elements = NSteps ÷ num_bins + 1)
+problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert)
+mean_TotalWeights, w_avg_estimate = estimate_weights_continuousTime!(problem; Nepochs=4, Nsamples=1000, verbose=true, logger=nothing)
+problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau, w_avg_estimate); logψ, H, Hilbert)
+
+BasicAcc = BasicAccumulator(outfile, m_proj, NWalkers; num_bins, bin_elements = NSteps ÷ num_bins + 1, weight_normalization = mean_TotalWeights)
 
 OccNum = OccupationNumber(lattice_size)
 SpinCorr = SpinCorrelations(lattice_size)
@@ -247,25 +251,18 @@ SSAcc = LazyObservableAccumulator(outfile, startConfig, SpinCorr, BasicAcc, proj
 
 Observer = CombinedObserver((BasicAcc, OccNumAcc, SSAcc))
 
-problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ, H, Hilbert)
-runGFMC!(problem, NoObserver(), NStepsEquil)
-runGFMC!(problem, Observer, NSteps)
+runGFMC!(problem, Observer, NSteps);
 nothing # hide
 ```
 
 ### Reading the results back from the HDF5 file
 
-Once the simulation is done, the accumulated numerators and denominators live in `outfile`. As described in [Advanced Usage](Advanced.md), the recommended way to post-process them is to read them back from the file (rather than reaching into the live accumulator objects) and bin them together, using [`get_energy_from_accumulator_bunching`](@ref) and [`get_obs_from_accumulator_bunching`](@ref):
+Once the simulation is done, the accumulated numerators and denominators live in `outfile`. As described in [Advanced Usage](Advanced.md), the recommended way to post-process them is to read them back from the file (rather than reaching into the live accumulator objects) and bin them together. [`get_energy_from_accumulator_bunching`](@ref) and [`get_obs_from_accumulator_bunching`](@ref) can read directly from the HDF5 file, given its path and (for observables) the name they were stored under:
 ```@example TFI
 function readObs(file, bunching)
-    BasicAccMock = (; en_numerator = h5read(file, "en_numerator"), Gnp_denominator = h5read(file, "Gnp_denominator"))
-    Energy = get_energy_from_accumulator_bunching(BasicAccMock, bunching)
-
-    OccNumMock = (; Obs_numerators = h5read(file, "OccupationNumber_numerator"), Obs_denominators = h5read(file, "OccupationNumber_denominator"))
-    OccupationNumbers = get_obs_from_accumulator_bunching(OccNumMock, bunching)
-
-    SzSzMock = (; Obs_numerators = h5read(file, "SpinCorrelations_numerator"), Obs_denominators = h5read(file, "SpinCorrelations_denominator"))
-    SzSz = get_obs_from_accumulator_bunching(SzSzMock, bunching)
+    Energy = get_energy_from_accumulator_bunching(file, bunching)
+    OccupationNumbers = get_obs_from_accumulator_bunching(file, "OccupationNumber", bunching)
+    SzSz = get_obs_from_accumulator_bunching(file, "SpinCorrelations", bunching)
 
     m_values = h5read(file, "OccupationNumber_m_values")
     return (; Energy, OccupationNumbers, SzSz, m_values)
