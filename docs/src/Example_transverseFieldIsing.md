@@ -140,7 +140,6 @@ runGFMC!(P, NoObserver(),200,logger=nothing) #equilibrate
 runGFMC!(P, Observers_jastrow,NSteps,logger=nothing)
 
 energies_jastrow = [getEnergies(Observer, MaxProjection) for Observer in Observers_jastrow]
-
 let
     fig = Figure()
     ax = Axis(fig[1, 1], xlabel=L"$τ$ (imaginary time)", ylabel=L"Energy$$")
