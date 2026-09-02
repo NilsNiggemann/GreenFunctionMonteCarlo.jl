@@ -7,6 +7,7 @@ Constructs a `SpinCorrelations` observable for a system with a specified number 
 # Returns
 A `SpinCorrelations` object initialized with a buffer of zeros of type `T` and length equal to the number of unique pairs of sites (i.e., `Nsites * (Nsites + 1) / 2`).
 # See also
+- [`SymmetrizedSpinCorrelations`](@ref), which averages the correlations over groups of symmetry-equivalent site pairs
 - [`LazyObservableAccumulator`](@ref)
 - [`ObservableAccumulator`](@ref)
 - [`OccupationNumber`](@ref)

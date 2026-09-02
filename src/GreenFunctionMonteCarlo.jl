@@ -113,6 +113,9 @@ module GreenFunctionMonteCarlo
     include("Observables/SpinCorrelations.jl")
     export SpinCorrelations, get_matrix_from_tri
 
+    include("Observables/SymmetrizedSpinCorrelations.jl")
+    export SymmetrizedSpinCorrelations
+
     include("Observers/BasicAccumulator.jl")
     export BasicAccumulator, get_energy_from_accumulator_bunching
 
