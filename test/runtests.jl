@@ -627,6 +627,81 @@ end
     SzSz_res = getObs_diagonal(ConfObs, SpinCorr, 1:mProj)
     SzSz_mat = get_matrix_from_tri(SzSz_res[end], SpinCorr.i_inds, SpinCorr.j_inds)
     @test all(isapprox.(SzSz_mat, SzSz_exact; atol = 0.05))
+
+    # Symmetry-reduced correlations, grouped by the distance |i-j| along the open chain. Both
+    # observables are linear in the same recorded configurations and are evaluated at the same
+    # projection order, so the symmetrized result has to reproduce the group averages of the full
+    # correlation matrix -- up to the Float32 buffer of SymmetrizedSpinCorrelations.
+    inds_Rij = [[(i, j) for i in 1:L for j in 1:L if abs(i - j) == d] for d in 0:(L-1)]
+    SymCorr = SymmetrizedSpinCorrelations(inds_Rij)
+    SzSz_sym = getObs_diagonal(ConfObs, SymCorr, 1:mProj)[end]
+    SzSz_sym_ref = [sum(SzSz_mat[i, j] for (i, j) in group) / length(group) for group in inds_Rij]
+    @test SzSz_sym ≈ SzSz_sym_ref atol = 1e-5 rtol = 1e-5
+end
+
+@testitem "SymmetrizedSpinCorrelations" begin
+    include("utils.jl")
+
+    L = 8
+    RNG = StableRNG(1234)
+    conf = rand(RNG, Bool, L)
+
+    # translation classes of a periodic chain: one group per distance R
+    inds_Rij = [[(i, mod1(i + R, L)) for i in 1:L] for R in 0:L-1]
+    SymCorr = SymmetrizedSpinCorrelations(inds_Rij)
+
+    @test GFMC.obs_size(SymCorr) == (length(inds_Rij),)
+
+    ref = [sum(σz(i, conf) * σz(j, conf) for (i, j) in group) / length(group) for group in inds_Rij]
+    res = copy(SymCorr(conf))
+    @test res ≈ ref atol = 1e-6 rtol = 1e-5
+
+    # the same numbers, obtained by averaging the full correlation matrix over each group
+    SpinCorr = SpinCorrelations(L)
+    SzSz_mat = get_matrix_from_tri(Float64.(SpinCorr(conf)), SpinCorr.i_inds, SpinCorr.j_inds)
+    @test res ≈ [sum(SzSz_mat[i, j] for (i, j) in group) / length(group) for group in inds_Rij] atol = 1e-6 rtol = 1e-5
+
+    @testset "pair formats" begin
+        # Tuples, Pairs, CartesianIndices and two-element vectors all describe the same pairs
+        as_pairs = [[i => j for (i, j) in group] for group in inds_Rij]
+        as_cartesian = [[CartesianIndex(i, j) for (i, j) in group] for group in inds_Rij]
+        as_vectors = [[[i, j] for (i, j) in group] for group in inds_Rij]
+        for inds in (as_pairs, as_cartesian, as_vectors)
+            @test SymmetrizedSpinCorrelations(inds)(conf) ≈ res atol = 1e-6 rtol = 1e-5
+        end
+    end
+
+    @testset "normalization and input validation" begin
+        SymCorr_raw = SymmetrizedSpinCorrelations(inds_Rij; normalize = false)
+        @test SymCorr_raw(conf) ≈ res .* length.(inds_Rij) atol = 1e-6 rtol = 1e-5
+        # an integer buffer only makes sense for the unnormalized sum
+        @test SymmetrizedSpinCorrelations(inds_Rij, Int8; normalize = false)(conf) == SymCorr_raw(conf)
+
+        @test_throws ArgumentError SymmetrizedSpinCorrelations(inds_Rij, Int8)
+        @test_throws ArgumentError SymmetrizedSpinCorrelations(Vector{Tuple{Int,Int}}[])
+        @test_throws ArgumentError SymmetrizedSpinCorrelations([[(1, 2)], Tuple{Int,Int}[]])
+        @test_throws ArgumentError SymmetrizedSpinCorrelations([[(0, 1)]])
+        @test_throws ArgumentError SymmetrizedSpinCorrelations([["not a pair"]])
+    end
+
+    @testset "copy" begin
+        SymCorr2 = copy(SymCorr)
+        GFMC.obs(SymCorr2) .= 0
+        @test GFMC.obs(SymCorr) == res
+        @test SymCorr2(conf) ≈ res atol = 1e-6 rtol = 1e-5
+    end
+
+    # invariant relied upon by LazyObservableAccumulator: the population-weighted sum over the
+    # walkers of the observable at index k
+    @testset "average_obs_walkers" begin
+        NWalkers = 7
+        walker_confs = rand(RNG, Bool, NWalkers, L)
+        WalkerPopulations = rand(RNG, 0:3, NWalkers)
+        for k in eachindex(inds_Rij)
+            expected = sum(WalkerPopulations[α] * SymCorr(walker_confs[α, :])[k] for α in 1:NWalkers)
+            @test GFMC.average_obs_walkers(SymCorr, k, walker_confs, WalkerPopulations) ≈ expected atol = 1e-6 rtol = 1e-5
+        end
+    end
 end
 
 include("Jastrow_tests.jl")

@@ -185,6 +185,17 @@ end
 
 Here, `OccupationNumber` is a pre-defined observable. Correlation functions such as $\langle S^z_i S^z_j \rangle$ are common enough to also come pre-defined: [`SpinCorrelations`](@ref) is a `@turbo`-accelerated implementation that only computes the upper triangle of the correlation matrix (use [`get_matrix_from_tri`](@ref) to expand its output back into a full matrix).
 
+If the model has symmetries, measuring every pair separately is wasteful. [`SymmetrizedSpinCorrelations`](@ref) instead averages the correlations over groups of symmetry-equivalent pairs,
+```math
+C(R) = \frac{1}{N_R} \sum_{(i,j) \in R} S^z_i S^z_j ,
+```
+and stores only one value per group. Which pairs belong to the same group is left entirely to you, so that partially broken symmetries or sublattice-resolved correlations can be treated as well. For a *periodic* chain, for example, grouping the pairs by their distance $R$ along the chain gives the translation-averaged correlator:
+```julia
+inds_Rij = [[(i, mod1(i + R, L)) for i in 1:L] for R in 0:L-1]
+Observable = SymmetrizedSpinCorrelations(inds_Rij)
+```
+This matters most for the accumulators discussed below, whose numerator arrays grow linearly with the number of measured values.
+
 It is also relatively simple to implement your own observables by defining a new subtype `O` of [`AbstractObservable`](@ref): you need `obs(::O)` returning a preallocated output buffer, a callable `(::O)(out, config)` that fills `out` given a configuration, and `Base.copy(::O)`. The `OccupationNumber` and `SpinCorrelations` source files are good templates to start from.
 
 !!! note "Two ways to measure diagonal observables"
