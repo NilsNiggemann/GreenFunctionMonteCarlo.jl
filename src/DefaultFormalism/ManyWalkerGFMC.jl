@@ -248,6 +248,7 @@ struct ProblemEnsemble{P<:AbstractGFMCProblem} <: AbstractGFMCProblem
 end
 
 function runGFMC!(P::ProblemEnsemble,Observers,args...;rng::Random.AbstractRNG = Random.default_rng(),kwargs...)
+    RNGs = duplicate_rng(rng, length(P.problems))
     Threads.@threads for i in eachindex(P.problems,Observers)
         prob = P.problems[i]
         Observer = Observers[i]
