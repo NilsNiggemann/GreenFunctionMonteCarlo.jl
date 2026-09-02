@@ -17,26 +17,20 @@ In the tutorial's example, `outfile = "observables.h5"`, `m_proj = mProj`, and `
 ### Example evaluation
 After the simulation, the accumulated data can be accessed from the HDF5 file. We still need to do some post-processing, such as averaging over the bins. This is not done automatically in the previous step, because the binning may also be used to estimate error bars, provided that the simulation is long enough to decorrelate the bins.
 
-The pattern of packing numerators/denominators read from the file into a mock `NamedTuple` (mimicking the accumulator's fields) generalizes to any observable stored via `LazyObservableAccumulator`/`ObservableAccumulator`, since they all share the `Obs_Name_numerator`/`Obs_Name_denominator`/`Obs_Name_m_values` naming convention. `SpinCorrelations` additionally needs its upper-triangular buffer expanded back into a full matrix, for which we reuse [`get_matrix_from_tri`](@ref).
+[`get_energy_from_accumulator_bunching`](@ref) and [`get_obs_from_accumulator_bunching`](@ref) can read directly from an HDF5 file, given its path and (for observables) the name they were stored under — this generalizes to any observable stored via `LazyObservableAccumulator`/`ObservableAccumulator`, since they all share the `Obs_Name_numerator`/`Obs_Name_denominator`/`Obs_Name_m_values` naming convention. `SpinCorrelations` additionally needs its upper-triangular buffer expanded back into a full matrix, for which we reuse [`get_matrix_from_tri`](@ref).
 ```julia
-# read the data from the HDF5 file and pack the numerators and denominators into tuples that mock the structure of the accumulators.
 # Note: If the accumulators themselves are still in memory, we can of course also use them instead.
 getSSCorr(v::AbstractVector) = get_matrix_from_tri(v) # expand one upper-triangular buffer into a full Nsites × Nsites matrix
 getSSCorr(M::AbstractMatrix) = stack(getSSCorr.(eachcol(M))) # ...for every projection step (one column each)
 
 function read_obs(file, key, bunching)
-    ObsMock = (;
-        Obs_numerators = h5read(file, "$(key)_numerator"),
-        Obs_denominators = h5read(file, "$(key)_denominator"),
-    )
+    obs = GFMC.get_obs_from_accumulator_bunching(file, key, bunching)
     m_values = h5read(file, "$(key)_m_values")
-    obs = GFMC.get_obs_from_accumulator_bunching(ObsMock, bunching)
     return obs, m_values
 end
 
 function readObs(file, bunching)
-    BasicAccMock = (;en_numerator = h5read(file, "en_numerator"), Gnp_denominator = h5read(file, "Gnp_denominator"))
-    Energy = GFMC.get_energy_from_accumulator_bunching(BasicAccMock, bunching)
+    Energy = GFMC.get_energy_from_accumulator_bunching(file, bunching)
 
     OccupationNumbers, mvalues_occ = read_obs(file, "OccupationNumber", bunching)
     SpinCorrs, mvalues_corr = read_obs(file, "SpinCorrelations", bunching)

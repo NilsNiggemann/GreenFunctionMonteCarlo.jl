@@ -52,11 +52,14 @@ accumulate into significant GC pressure and hurt multi-threaded scaling.
 end
 
 function duplicate_rng(rng::Random.AbstractRNG, n::Integer)
-    rngs = [copy(rng) for _ in 1:n]
-    for (i, rng) in enumerate(rngs)
-        Random.seed!(rng, i + rand(rng, UInt))
-    end
-    return rngs
+    # Draw the per-copy seed from `rng` itself (not from the copy), so that
+    # (a) each copy gets an independently drawn seed instead of all copies
+    # deriving the same value from an identical, unconsumed state, and
+    # (b) `rng` is actually advanced, so repeated calls with the same `rng`
+    # object (e.g. the task-local `Random.default_rng()` reused across
+    # several sequential problems on a single thread) do not hand out
+    # identical streams.
+    return [Random.seed!(copy(rng), rand(rng, UInt)) for _ in 1:n]
 end
 
 # Note: Polyester tasks are sticky so using Threads.threadid() can be used as threadsafe storage.

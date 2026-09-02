@@ -1,10 +1,13 @@
 # see documentation at https://juliadocs.github.io/Documenter.jl/stable/
 
+using Pkg
+Pkg.develop(PackageSpec(path = joinpath(@__DIR__, "..")))
+
 using Documenter, GreenFunctionMonteCarlo
 
 makedocs(
     modules = [GreenFunctionMonteCarlo],
-    format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true"),
+    format = Documenter.HTML(; prettyurls = get(ENV, "CI", nothing) == "true",size_threshold_ignore = ["References.md"]),
     authors = "Nils Niggemann",
     sitename = "GreenFunctionMonteCarlo.jl",
 
