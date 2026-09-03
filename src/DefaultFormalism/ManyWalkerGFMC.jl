@@ -247,11 +247,12 @@ struct ProblemEnsemble{P<:AbstractGFMCProblem} <: AbstractGFMCProblem
     problems::Vector{P}
 end
 
-function runGFMC!(P::ProblemEnsemble,Observers,args...;kwargs...)
+function runGFMC!(P::ProblemEnsemble,Observers,args...; rng = Random.default_rng(), kwargs...)
+    RNGs = duplicate_rng(rng, length(P.problems))
     Threads.@threads for i in eachindex(P.problems,Observers)
         prob = P.problems[i]
         Observer = Observers[i]
-        runGFMC!(prob,Observer,args...;kwargs...)
+        runGFMC!(prob,Observer,args...;kwargs...,rng = RNGs[i])
     end
     return Observers
 end
