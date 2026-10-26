@@ -88,6 +88,9 @@ module GreenFunctionMonteCarlo
     include("Variational/Jastrow.jl")
     export Jastrow
 
+    include("Variational/ClusterCPS.jl")
+    export ClusterCPS
+
     include("Variational/NaiveFunction.jl")
     export NaiveFunction
 

@@ -93,6 +93,67 @@ problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); log
 
 The parallelization scheme can also be overridden per call, e.g. `runGFMC!(problem, Observer, NSteps; parallelization = BatchMultiThreaded(Threads.nthreads()))`.
 
+## Cluster correlator product states
+[`ClusterCPS`](@ref) is a guiding function built from correlators on clusters of sites (also called entangled-plaquette states). Each cluster ``c = (s_{c,1}, \dots, s_{c,L_c})`` carries a table ``T_{t(c)}`` that assigns a value to every local configuration of the cluster:
+```math
+\log\psi(x) = \sum_c T_{t(c)}\big[I_c(x)\big], \qquad I_c(x) = \sum_{k=1}^{L_c} \big(x_{s_{c,k}} - n_\mathrm{min}\big)\, d^{\,k-1}.
+```
+Here ``d`` is the number of local states (`local_dim`, 2 for hard-core bosons) and ``n_\mathrm{min}`` the smallest occupation (`min_occupation`). A table for a cluster of ``L`` sites therefore has ``d^L`` entries, and entry `I + 1` belongs to the pattern whose base-``d`` digits, least significant first, are the occupations of the cluster's sites in the order they were listed.
+
+Unlike a [`Jastrow`](@ref) factor, a CPS captures correlations of arbitrary order within each cluster, e.g. the ring-exchange structure of a plaquette. Pair and single-site clusters reproduce a Jastrow factor exactly.
+
+### Building a CPS
+Clusters can have any size, can overlap, and do not need to cover all sites. Every cluster refers to one table, and clusters may share a table:
+```julia
+using GreenFunctionMonteCarlo
+L = 12
+Hilbert = BosonHilbertSpace(L, HardCoreConstraint())
+
+# all plaquettes of 4 consecutive sites share one table (translation invariance)
+plaquettes = [[mod1(i + k, L) for k in 0:3] for i in 1:L]
+logψ = ClusterCPS(plaquettes, zeros(2^4))
+
+# clusters of different sizes, each size with its own table: bonds use table 1, triangles table 2
+bonds = [[i, mod1(i + 1, L)] for i in 1:L]
+triangles = [[i, mod1(i + 1, L), mod1(i + 2, L)] for i in 1:L]
+logψ = ClusterCPS([bonds; triangles], [zeros(2^2), zeros(2^3)], [fill(1, L); fill(2, L)])
+
+# soft-core bosons with occupations 0, 1, 2
+logψ = ClusterCPS(bonds, zeros(3^2); local_dim = 3)
+```
+`clusters` may also be a matrix whose columns are the clusters.
+
+The simplest way to fill a table from a function of the local occupations is `digits`, which uses the same digit order as the CPS:
+```julia
+d, Lc = 2, 4
+f(n) = -0.3 * sum(n[k] * n[mod1(k + 1, Lc)] for k in 1:Lc)    # any function of the cluster's occupations n[1:Lc]
+table = [f(digits(I; base = d, pad = Lc)) for I in 0:d^Lc-1]     # add min_occupation to the digits if it is nonzero
+```
+
+### Precompiling the moves of the Hamiltonian
+`log_psi_diff` only visits the clusters that contain a site changed by the move. By default it finds them, and their pattern changes, from scratch at every call, which works for any move type. Passing the moves of the Hamiltonian lets the constructor precompute this for every move:
+```julia
+logψ = ClusterCPS(plaquettes, table; moves = H.moves)
+```
+On a pyrochlore ring-exchange model (768 sites, 768 hexagon clusters, 25 clusters touched per move) this made a full GFMC step about 1.5× faster than the generic path. Precompiled moves are found by identity (`===`), so a move that is not in the list is still handled exactly by the generic path. Supported are moves with a state-independent `move_dx` (such as `SparseMove`) and `FlipMove`s, which require `local_dim = 2` and `min_occupation = 0`.
+
+### Parameters
+[`get_params`](@ref) returns all tables concatenated into one vector, with a shared table appearing once. [`GreenFunctionMonteCarlo.get_tables`](@ref) returns a view of each table. Changing them changes the guiding function immediately. Walker buffers stay valid, since they only store the integer pattern of each cluster, which is also updated exactly after every move (no accumulation of round-off errors).
+```julia
+tables = GreenFunctionMonteCarlo.get_tables(logψ)
+tables[1] .= trained_plaquette_table
+```
+
+### Forbidden patterns
+A table entry of `-Inf` sets ``\psi = 0`` for every configuration in which the cluster shows that pattern, so moves into such configurations get zero weight. For example, a nearest-neighbour exclusion constraint on a chain:
+```julia
+logψ = ClusterCPS([[i, i + 1] for i in 1:L-1], [0.0, 0.0, 0.0, -Inf])   # pattern (1,1) forbidden
+```
+Walkers must start in configurations with finite ``\log\psi``. `NaN` and `+Inf` entries are rejected by the constructor.
+
+### Consistency checks
+Occupations outside `min_occupation:min_occupation+local_dim-1` cannot be represented by the tables. The CPS throws an `ArgumentError` when a configuration, or the target of a move, contains such an occupation on a site that belongs to a cluster, instead of reading a wrong table entry. This happens, for example, when the Hilbert space allows more particles per site than `local_dim` covers.
+
 ## DiscretePropagator
 [`ContinuousTimePropagator`](@ref) is the recommended propagator for most problems. [`DiscretePropagator`](@ref) implements the more traditional discrete-time projector `G = Λ·I - H`: at each of `nBranch` sub-steps, a walker either stays put (self-loop weight `Λ - H_xx(x)`) or moves via an off-diagonal matrix element. This requires choosing `Λ ≥ H_xx(x)` for every configuration visited, and is only efficient when a reasonably tight such `Λ` is known — i.e. when the diagonal part `H_xx` is small or zero. Otherwise, the self-loop probability dominates the sampling and `ContinuousTimePropagator` should be preferred.
 
