@@ -135,14 +135,20 @@ table = [f(digits(I; base = d, pad = Lc)) for I in 0:d^Lc-1]     # add min_occup
 ```julia
 logψ = ClusterCPS(plaquettes, table; moves = H.moves)
 ```
-On a pyrochlore ring-exchange model (768 sites, 768 hexagon clusters, 25 clusters touched per move) this made a full GFMC step about 1.5× faster than the generic path. Precompiled moves are found by identity (`===`), so a move that is not in the list is still handled exactly by the generic path. Supported are moves with a state-independent `move_dx` (such as `SparseMove`) and `FlipMove`s, which require `local_dim = 2` and `min_occupation = 0`.
+For every combination of a table and a change of a cluster's local states that occurs among the moves, the constructor also tabulates the differences ``T[I'] - T[I]`` for all patterns ``I``. A precompiled move then costs one lookup per touched cluster. These difference tables are shared between all clusters and moves with the same table and the same change, so for translation-invariant clusters and moves they stay small (16 blocks of 64 entries in the example below).
+
+On a pyrochlore ring-exchange model (768 sites, 768 hexagon clusters sharing one table, 25 clusters touched per move, 100 walkers) this made a full GFMC step 2× faster than the generic path.
+
+Precompiled moves are found by identity (`===`), so a move that is not in the list is still handled exactly by the generic path. Supported are moves with a state-independent `move_dx` (such as `SparseMove`) and `FlipMove`s, which require `local_dim = 2` and `min_occupation = 0`.
 
 ### Parameters
-[`get_params`](@ref) returns all tables concatenated into one vector, with a shared table appearing once. [`GreenFunctionMonteCarlo.get_tables`](@ref) returns a view of each table. Changing them changes the guiding function immediately. Walker buffers stay valid, since they only store the integer pattern of each cluster, which is also updated exactly after every move (no accumulation of round-off errors).
+[`get_params`](@ref) returns a copy of all tables concatenated into one vector, with a shared table appearing once, and [`GreenFunctionMonteCarlo.get_tables`](@ref) a copy of each table. Change the parameters with [`GreenFunctionMonteCarlo.set_params!`](@ref), which also updates the difference tables of the precompiled moves:
 ```julia
-tables = GreenFunctionMonteCarlo.get_tables(logψ)
-tables[1] .= trained_plaquette_table
+params = get_params(logψ)
+params[1:16] .= trained_plaquette_table
+GreenFunctionMonteCarlo.set_params!(logψ, params)
 ```
+Walker buffers stay valid, since they only store the integer pattern of each cluster, which is also updated exactly after every move (no accumulation of round-off errors).
 
 ### Forbidden patterns
 A table entry of `-Inf` sets ``\psi = 0`` for every configuration in which the cluster shows that pattern, so moves into such configurations get zero weight. For example, a nearest-neighbour exclusion constraint on a chain:

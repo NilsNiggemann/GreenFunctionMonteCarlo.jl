@@ -26,8 +26,8 @@ function random_tables(rng, clusters, T; local_dim = 2, copies = 2)
 end
 
 """
-Random walk over applicable moves. At every step check, for every move of `H`, `log_psi_diff` against
-`ψ(x′) - ψ(x)` (or -Inf if the move is not applicable), then apply a random applicable move, update the
+Random walk over applicable moves. At every step check, for every move of `H`, `log_psi_diff` (and for precompiled
+moves of a ClusterCPS also its fast path alone) against `ψ(x′) - ψ(x)` (or -Inf if the move is not applicable), then apply a random applicable move, update the
 buffer with `post_move_affect!` and compare it with a freshly computed one. Returns the number of checked moves.
 """
 function check_random_walk(ψ, H, Hilbert, x0; nsteps = 100, rng = StableRNG(42), atol = 1e-10)
@@ -42,6 +42,9 @@ function check_random_walk(ψ, H, Hilbert, x0; nsteps = 100, rng = StableRNG(42)
                 y = copy(x)
                 apply!(y, m)
                 @test Δ ≈ ψ(y) - ψ(x) atol = atol
+                if ψ isa ClusterCPS && GFMC._compiled_move_id(ψ, m) > 0     # precompiled moves must not need the fallback
+                    @test GFMC._log_psi_diff_compiled(x, m, ψ, B, Hilbert) ≈ ψ(y) - ψ(x) atol = atol
+                end
                 isfinite(Δ) && push!(applicable, k)
                 nchecked += 1
             else

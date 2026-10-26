@@ -33,10 +33,16 @@ in configurations with finite ``\log\psi``.
   occupation in `min_occupation:min_occupation+local_dim-1` (checked, also for the target of a move).
 - `min_occupation::Integer = 0`: occupation that maps to digit 0.
 - `moves = nothing`: optionally the moves of the Hamiltonian (e.g. `H.moves`). Each of them is then
-  precompiled into the list of clusters it touches and their pattern shifts, which makes
-  `log_psi_diff` about 1.5-2× faster. Supported are moves with a state-independent `move_dx`
-  (e.g. `SparseMove`) and `FlipMove`s (requires `local_dim = 2`). Moves not in this list, or not
-  identical (`===`) to one of them, are still handled exactly by the generic code path.
+  precompiled into the list of clusters it touches, and for every (table, change of the cluster's
+  local states) that occurs, the differences ``T[I'] - T[I]`` are tabulated for all patterns ``I``.
+  `log_psi_diff` then costs one table lookup per touched cluster, which makes it about 2× faster.
+  Supported are moves with a state-independent `move_dx` (e.g. `SparseMove`) and `FlipMove`s
+  (requires `local_dim = 2`). Moves not in this list, or not identical (`===`) to one of them, are
+  still handled exactly by the generic code path.
+
+# Parameters
+[`get_params`](@ref) and [`GreenFunctionMonteCarlo.get_tables`](@ref) return copies. Change the
+parameters with [`GreenFunctionMonteCarlo.set_params!`](@ref), which also updates the tabulated differences.
 
 # Cost
 `log_psi_diff` touches only the clusters containing an affected site of the move, i.e.
@@ -53,7 +59,7 @@ bonds = [[i, mod1(i + 1, N)] for i in 1:N]          # nearest-neighbour pairs, s
 logψ = ClusterCPS(bonds, [0.0, 0.1, 0.1, -0.3])    # patterns (0,0), (1,0), (0,1), (1,1)
 ```
 
-See also [`Jastrow`](@ref), [`get_params`](@ref), [`GreenFunctionMonteCarlo.get_tables`](@ref).
+See also [`Jastrow`](@ref), [`get_params`](@ref), [`GreenFunctionMonteCarlo.get_tables`](@ref), [`GreenFunctionMonteCarlo.set_params!`](@ref).
 """
 struct ClusterCPS{T<:AbstractFloat,M} <: AbstractGuidingFunction
     params::Vector{T}                       # all tables, concatenated
@@ -73,6 +79,10 @@ struct ClusterCPS{T<:AbstractFloat,M} <: AbstractGuidingFunction
     row_ptr::Vector{Int}                    # clusters touched by precompiled move j: rows row_ptr[j]:row_ptr[j+1]-1
     row_cluster::Vector{Int}
     row_shift::Vector{Int}                  # pattern shift (added, or XOR mask for a FlipMove) of that cluster
+    row_dtable::Vector{Int}                 # Δ log ψ of that cluster = dtable[row_dtable[r] + pattern]
+    dtable::Vector{T}                       # params[dtable_new[i]] - params[dtable_old[i]], NaN where the target pattern is invalid
+    dtable_new::Vector{Int}                 # params index of the pattern after the move (0 if invalid)
+    dtable_old::Vector{Int}                 # params index of the pattern before the move
 end
 
 function ClusterCPS(clusters::AbstractVector{<:AbstractVector{<:Integer}}, tables::AbstractVector{<:AbstractVector{T}}, cluster_table::AbstractVector{<:Integer}; local_dim::Integer = 2, min_occupation::Integer = 0, moves = nothing) where {T<:Real}
@@ -112,16 +122,20 @@ function ClusterCPS(clusters::AbstractVector{<:AbstractVector{<:Integer}}, table
         next[i] += 1
     end
 
-    compiled = _compile_moves(isnothing(moves) ? Nothing[] : collect(moves), site_ptr, site_cluster, site_stride, local_dim, min_occupation)
-    return ClusterCPS(params, table_ranges, Vector{Int}(cluster_table), cluster_offset, cluster_ptr, cluster_sites, site_ptr, site_cluster, site_stride, Int(local_dim), Int(min_occupation), compiled...)
+    precompiled = isnothing(moves) ? Nothing[] : collect(moves)
+    logψ = ClusterCPS(params, table_ranges, Vector{Int}(cluster_table), cluster_offset, cluster_ptr, cluster_sites, site_ptr, site_cluster, site_stride, Int(local_dim), Int(min_occupation), precompiled, Int[], Int[], [1], Int[], Int[], Int[], similar(params, 0), Int[], Int[])
+    _compile_moves!(logψ)
+    return _refresh_differences!(logψ)
 end
 
 ClusterCPS(clusters::AbstractVector{<:AbstractVector{<:Integer}}, table::AbstractVector{<:Real}; kwargs...) = ClusterCPS(clusters, [table], ones(Int, length(clusters)); kwargs...)
 ClusterCPS(clusters::AbstractMatrix{<:Integer}, args...; kwargs...) = ClusterCPS(collect(eachcol(clusters)), args...; kwargs...)
 
-# Coefficient of slot stride for site `a` of a precompiled move, and how the shift acts on a pattern.
+# How a precompiled move changes the digits of a cluster (δ: one entry per slot), and its pattern.
 _shift_coefficient(move::FlipMove, a) = 1
 _shift_coefficient(move::AbstractMove, a) = Int(move_dx(move)[a])
+_target_digits(::FlipMove, digits, δ) = digits .⊻ δ
+_target_digits(::AbstractMove, digits, δ) = digits .+ δ
 @inline _shifted(::FlipMove, pattern, shift) = pattern ⊻ shift
 @inline _shifted(::AbstractMove, pattern, shift) = pattern + shift
 
@@ -132,56 +146,92 @@ function _check_compilable(move::AbstractMove, local_dim, min_occupation)
     hasmethod(move_dx, Tuple{typeof(move)}) || throw(ArgumentError("moves of type $(typeof(move)) have no state-independent move_dx and cannot be precompiled; pass moves = nothing"))
 end
 
-# Touched clusters and pattern shifts of every move, plus a first-site index for looking moves up.
-function _compile_moves(moves::Vector{M}, site_ptr, site_cluster, site_stride, local_dim, min_occupation) where {M}
-    row_ptr, row_cluster, row_shift = [1], Int[], Int[]
+# Fill the row and difference-table fields from logψ.moves: touched clusters, their pattern shifts and difference blocks,
+# plus a first-site index for looking moves up. Blocks are shared between rows with the same table and digit change.
+function _compile_moves!(logψ::ClusterCPS)
+    (; moves, local_dim) = logψ
+    blocks = Dict{Tuple{Int,Bool,Vector{Int}},Int}()
     first_sites = zeros(Int, length(moves))
     for (j, move) in enumerate(moves)
-        _check_compilable(move, local_dim, min_occupation)
+        _check_compilable(move, local_dim, logψ.min_occupation)
         sites = affected_sites(move)
-        shifts = Dict{Int,Int}()
-        for (a, i) in enumerate(sites), q in (i < length(site_ptr) ? (site_ptr[i]:site_ptr[i+1]-1) : (1:0))
-            c = site_cluster[q]
-            shifts[c] = get(shifts, c, 0) + _shift_coefficient(move, a) * site_stride[q]
+        touched = sort!(unique(logψ.site_cluster[q] for i in sites for q in _site_range(logψ, i)))
+        for c in touched
+            slots = logψ.cluster_sites[logψ.cluster_ptr[c]:logψ.cluster_ptr[c+1]-1]
+            δ = [sum((_shift_coefficient(move, a) for (a, i) in enumerate(sites) if i == site); init = 0) for site in slots]
+            all(iszero, δ) && continue
+            t = logψ.cluster_table[c]
+            push!(logψ.row_cluster, c)
+            push!(logψ.row_shift, evalpoly(local_dim, δ))
+            push!(logψ.row_dtable, get!(() -> _add_difference_block!(logψ, t, move, δ), blocks, (t, move isa FlipMove, δ)))
         end
-        for (c, shift) in sort!(collect(shifts))
-            iszero(shift) && continue
-            push!(row_cluster, c)
-            push!(row_shift, shift)
-        end
-        push!(row_ptr, length(row_cluster) + 1)
+        push!(logψ.row_ptr, length(logψ.row_cluster) + 1)
         isempty(sites) || (first_sites[j] = first(sites))
     end
     counts = zeros(Int, maximum(first_sites; init = 0))
     foreach(i -> i > 0 && (counts[i] += 1), first_sites)
-    move_ptr = cumsum([1; counts])
-    move_ids = zeros(Int, length(moves) - count(iszero, first_sites))
-    next = move_ptr[1:end-1]
+    append!(logψ.move_ptr, cumsum([1; counts]))
+    resize!(logψ.move_ids, length(moves) - count(iszero, first_sites))
+    next = logψ.move_ptr[1:end-1]
     for (j, i) in enumerate(first_sites)
         i > 0 || continue
-        move_ids[next[i]] = j
+        logψ.move_ids[next[i]] = j
         next[i] += 1
     end
-    return moves, move_ptr, move_ids, row_ptr, row_cluster, row_shift
+    return logψ
 end
-_compile_moves(moves::Vector{Nothing}, args...) = (Nothing[], [1], Int[], [1], Int[], Int[])
+
+# Append the params indices of T[I'] and T[I] for every pattern I of table t under the digit change δ; returns the dtable index of I = 0.
+function _add_difference_block!(logψ::ClusterCPS, t, move, δ)
+    d, L = logψ.local_dim, length(δ)
+    first_entry = first(logψ.table_ranges[t])
+    start = length(logψ.dtable_old) + 1
+    for I in 0:d^L-1
+        target = _target_digits(move, digits(I; base = d, pad = L), δ)
+        push!(logψ.dtable_old, first_entry + I)
+        push!(logψ.dtable_new, all(n -> 0 <= n < d, target) ? first_entry + evalpoly(d, target) : 0)
+    end
+    return start
+end
+
+function _refresh_differences!(logψ::ClusterCPS{T}) where {T}
+    (; dtable, dtable_new, dtable_old, params) = logψ
+    resize!(dtable, length(dtable_old))
+    for i in eachindex(dtable, dtable_new, dtable_old)
+        dtable[i] = iszero(dtable_new[i]) ? T(NaN) : params[dtable_new[i]] - params[dtable_old[i]]
+    end
+    return logψ
+end
 
 guidingfunc_name(::ClusterCPS) = "ClusterCPS"
 
 """
     get_params(logψ::ClusterCPS)
 
-All tables concatenated into one vector (a shared table appears once). Mutating it changes `logψ`
-immediately; walker buffers stay valid, since they only store the cluster patterns.
+Copy of all tables concatenated into one vector (a shared table appears once).
+Use [`GreenFunctionMonteCarlo.set_params!`](@ref) to change them.
 """
-get_params(logψ::ClusterCPS) = logψ.params
+get_params(logψ::ClusterCPS) = copy(logψ.params)
 
 """
     get_tables(logψ::ClusterCPS)
 
-Views of the individual tables into [`get_params`](@ref)`(logψ)`, in the order they were passed.
+Copies of the individual tables, in the order they were passed to the constructor.
 """
-get_tables(logψ::ClusterCPS) = [view(logψ.params, r) for r in logψ.table_ranges]
+get_tables(logψ::ClusterCPS) = [logψ.params[r] for r in logψ.table_ranges]
+
+"""
+    set_params!(logψ::ClusterCPS, params::AbstractVector)
+
+Replace all tables by `params`, laid out as returned by [`get_params`](@ref), and update the tabulated
+differences of the precompiled moves. Walker buffers stay valid, since they only store the cluster patterns.
+"""
+function set_params!(logψ::ClusterCPS, params::AbstractVector{<:Real})
+    length(params) == length(logψ.params) || throw(DimensionMismatch("expected $(length(logψ.params)) parameters, got $(length(params))"))
+    all(<(Inf), params) || throw(ArgumentError("parameters contain NaN or +Inf (only -Inf, i.e. ψ = 0, is allowed)"))
+    copyto!(logψ.params, params)
+    return _refresh_differences!(logψ)
+end
 
 num_clusters(logψ::ClusterCPS) = length(logψ.cluster_offset)
 
@@ -246,16 +296,40 @@ end
 
 @inline _site_range(logψ::ClusterCPS, i) = i < length(logψ.site_ptr) ? (logψ.site_ptr[i]:logψ.site_ptr[i+1]-1) : (1:0)
 
-@inline function log_psi_diff(x::AbstractConfig, move::AbstractMove, logψ::ClusterCPS{T}, Buffer::ClusterCPSBuffer, Hilbert::AbstractHilbertSpace) where {T}
+function log_psi_diff(x::AbstractConfig, move::AbstractMove, logψ::ClusterCPS, Buffer::ClusterCPSBuffer, Hilbert::AbstractHilbertSpace)
+    Δ = _log_psi_diff_compiled(x, move, logψ, Buffer, Hilbert)
+    return isnan(Δ) ? _log_psi_diff_generic(x, move, logψ, Buffer) : Δ
+end
+
+# Same as the generic method, but in two passes: a call to the generic path inside the first, hot loop costs ~30 %,
+# even if it is never taken.
+function _get_markov_weights!(weights::AbstractVector, x::AbstractConfig, H::AbstractSignFreeOperator, logψ::ClusterCPS, Hilbert::AbstractHilbertSpace, Buffer::ClusterCPSBuffer)
+    nfallback = 0
+    for i in eachindex(weights)
+        weights[i] = _log_psi_diff_compiled(x, get_move(H, i), logψ, Buffer, Hilbert)
+        nfallback += isnan(weights[i])
+    end
+    if nfallback > 0
+        for i in eachindex(weights)
+            isnan(weights[i]) && (weights[i] = _log_psi_diff_generic(x, get_move(H, i), logψ, Buffer))
+        end
+    end
+    Hxy = get_offdiagonal_elements(H)
+    LoopVectorization.@turbo for i in eachindex(Hxy, weights)
+        weights[i] = -Hxy[i] * exp(weights[i])
+    end
+    return weights
+end
+
+# Precompiled moves: one difference-table lookup per touched cluster. Returns NaN for moves that were not precompiled
+# and for targets outside the local states (NaN entries of dtable); the generic path then gives the value or the error.
+@inline function _log_psi_diff_compiled(x::AbstractConfig, move::AbstractMove, logψ::ClusterCPS{T}, Buffer::ClusterCPSBuffer, Hilbert::AbstractHilbertSpace) where {T}
     isapplicable(x, move, Hilbert) || return T(-Inf)
     j = _compiled_move_id(logψ, move)
-    iszero(j) && return _log_psi_diff_generic(x, move, logψ, Buffer)
-    _covers_hilbert_space(logψ, constraint(Hilbert)) || _check_target_states(x, move, logψ)
+    iszero(j) && return T(NaN)
     Δ = zero(T)
     @inbounds for r in logψ.row_ptr[j]:logψ.row_ptr[j+1]-1
-        c = logψ.row_cluster[r]
-        offset, old = logψ.cluster_offset[c], Buffer.pattern[c]
-        Δ += logψ.params[offset+_shifted(move, old, logψ.row_shift[r])] - logψ.params[offset+old]
+        Δ += logψ.dtable[logψ.row_dtable[r]+Buffer.pattern[logψ.row_cluster[r]]]
     end
     return Δ
 end
@@ -273,20 +347,7 @@ end
     return 0
 end
 
-# true if every occupation allowed by the constraint is a valid local state of the CPS, so targets of applicable moves need no check
-_covers_hilbert_space(logψ::ClusterCPS, ::AbstractConstraint) = false
-_covers_hilbert_space(logψ::ClusterCPS, ::HardCoreConstraint) = logψ.min_occupation == 0
-_covers_hilbert_space(logψ::ClusterCPS, c::OccupationNumberConstraint) = logψ.min_occupation <= c.min_occupation && c.max_occupation < logψ.min_occupation + logψ.local_dim
-
-_check_target_states(x, move::FlipMove, logψ::ClusterCPS) = nothing   # Bool configs, local_dim = 2
-@inline function _check_target_states(x, move::AbstractMove, logψ::ClusterCPS)
-    dx = move_dx_before(move, x)
-    for (a, i) in enumerate(affected_sites(move))
-        isempty(_site_range(logψ, i)) || _digit(logψ, i, x[i] + dx[a])
-    end
-end
-
-# Moves that were not precompiled: accumulate the pattern change of every touched cluster in the buffer's scratch space.
+# Any move (also the fallback for _log_psi_diff_compiled): accumulate the pattern change of every touched cluster in the buffer's scratch space.
 function _log_psi_diff_generic(x::AbstractConfig, move::AbstractMove, logψ::ClusterCPS{T}, Buffer::ClusterCPSBuffer) where {T}
     sites = affected_sites(move)
     dx = move_dx_before(move, x)

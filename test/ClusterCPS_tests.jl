@@ -58,20 +58,33 @@
         @test length(get_params(separate)) == 32
     end
 
-    @testset "parameters: shared tables, views, mutation" begin
-        ψ = ClusterCPS([[1, 2], [2, 3], [1]], [zeros(4), zeros(2)], [1, 1, 2])
-        x = BosonConfig(Bool[1, 1, 1])
-        B = GFMC.allocate_GWF_buffer(ψ, x)
-        tables = GFMC.get_tables(ψ)
-        @test length(tables) == 2 && length.(tables) == [4, 2]
-        tables[1][4] = 0.5          # pattern (1,1), used by both pair clusters
-        tables[2][2] = 0.25
-        @test get_params(ψ) == [0, 0, 0, 0.5, 0, 0.25]
-        @test ψ(x) == 2 * 0.5 + 0.25
-        # buffers stay valid after changing parameters: flipping site 2 removes both pair contributions
+    @testset "parameters: shared tables, copies, set_params!" begin
         Hilbert = BosonHilbertSpace(3, HardCoreConstraint())
-        H = localOperator([Bool[0, 1, 0]], [-1.0], ZeroDiagOperator(), Hilbert)
-        @test GFMC.log_psi_diff(x, H.moves[1], ψ, B, Hilbert) == -1.0
+        H = localOperator([Bool[0, 1, 0], Bool[1, 0, 1]], [-1.0, -1.0], ZeroDiagOperator(), Hilbert)
+        for moves in (nothing, H.moves)
+            ψ = ClusterCPS([[1, 2], [2, 3], [1]], [zeros(4), zeros(2)], [1, 1, 2]; moves)
+            x = BosonConfig(Bool[1, 1, 1])
+            B = GFMC.allocate_GWF_buffer(ψ, x)
+            @test length.(GFMC.get_tables(ψ)) == [4, 2]
+            get_params(ψ) .= 1.0                   # copies: the guide is unchanged
+            GFMC.get_tables(ψ)[1] .= 1.0
+            @test ψ(x) == 0.0 && GFMC.log_psi_diff(x, H.moves[1], ψ, B, Hilbert) == 0.0
+
+            p = get_params(ψ)
+            p[4] = 0.5                             # pattern (1,1) of table 1, used by both pair clusters
+            p[6] = 0.25
+            GFMC.set_params!(ψ, p)
+            @test get_params(ψ) == [0, 0, 0, 0.5, 0, 0.25]
+            @test GFMC.get_tables(ψ) == [[0, 0, 0, 0.5], [0, 0.25]]
+            @test ψ(x) == 2 * 0.5 + 0.25
+            # the existing buffer stays valid: flipping site 2 removes both pair contributions
+            @test GFMC.log_psi_diff(x, H.moves[1], ψ, B, Hilbert) == -1.0
+            @test check_random_walk(ψ, H, Hilbert, x; nsteps = 10) > 0
+
+            @test_throws DimensionMismatch GFMC.set_params!(ψ, zeros(5))
+            @test_throws ArgumentError GFMC.set_params!(ψ, [0, 0, 0, NaN, 0, 0])
+            @test get_params(ψ) == [0, 0, 0, 0.5, 0, 0.25]         # unchanged after a rejected update
+        end
     end
 
     @testset "no clusters, uncovered sites, BitVector configs" begin
@@ -153,16 +166,6 @@ end
         @test GFMC._compiled_move_id(ψc, H.moves[1]) == 1
         @test_throws ArgumentError GFMC.log_psi_diff(x, H.moves[1], ψc, B, Hilbert)
         @test GFMC.log_psi_diff(x, H.moves[2], ψc, B, Hilbert) == 0.0
-    end
-
-    @testset "which Hilbert spaces make the target check redundant" begin
-        covers(ψ, c) = GFMC._covers_hilbert_space(ψ, c)
-        ψ2, ψ3, ψ3shift = ClusterCPS([[1]], zeros(2)), ClusterCPS([[1]], zeros(3); local_dim = 3), ClusterCPS([[1]], zeros(3); local_dim = 3, min_occupation = 1)
-        @test covers(ψ2, HardCoreConstraint()) && covers(ψ3, HardCoreConstraint()) && !covers(ψ3shift, HardCoreConstraint())
-        @test covers(ψ2, OccupationNumberConstraint(0, 1)) && !covers(ψ2, OccupationNumberConstraint(0, 2))
-        @test covers(ψ3, OccupationNumberConstraint(0, 2)) && covers(ψ3, OccupationNumberConstraint(1, 2))
-        @test covers(ψ3shift, OccupationNumberConstraint(1, 3)) && !covers(ψ3shift, OccupationNumberConstraint(0, 2)) && !covers(ψ3shift, OccupationNumberConstraint(1, 4))
-        @test !covers(ψ2, GFMC.NoConstraint())
     end
 
     @testset "moves that cannot be precompiled" begin
@@ -457,6 +460,64 @@ end
         end
     end
 
+    @testset "Markov weights with partly precompiled moves" begin
+        for (Hilbert, H) in (getExample(N, 20, rng, nothing, HardCoreConstraint()), soft_core_ring(N, 0, 1))
+            generic = ClusterCPS(clusters, tables, cluster_table)
+            partial = ClusterCPS(clusters, tables, cluster_table; moves = H.moves[1:2:end])
+            for _ in 1:10
+                x = BosonConfig(Hilbert)
+                x .= rand(rng, Bool, N)
+                wg, wp = zeros(length(H.moves)), zeros(length(H.moves))
+                GFMC.get_markov_weights!(wg, x, H, generic, Hilbert, GFMC.allocate_GWF_buffer(generic, x))
+                GFMC.get_markov_weights!(wp, x, H, partial, Hilbert, GFMC.allocate_GWF_buffer(partial, x))
+                @test wp ≈ wg rtol = 1e-12
+                @test GFMC.getLocalEnergy(x, H, partial, Hilbert) ≈ GFMC.getLocalEnergy(x, H, generic, Hilbert) rtol = 1e-12
+            end
+        end
+        # a precompiled move into an occupation the tables do not cover still throws inside the weight loop
+        Hilbert = BosonHilbertSpace(2, OccupationNumberConstraint(0, 2))
+        H = localOperator([Int8[1, 0], Int8[0, 1]], [-1.0, -1.0], ZeroDiagOperator(), Hilbert)
+        ψ = ClusterCPS([[1, 2]], zeros(4); moves = H.moves)
+        x = BosonConfig(UInt8[1, 0])
+        @test_throws ArgumentError GFMC.get_markov_weights!(zeros(2), x, H, ψ, Hilbert, GFMC.allocate_GWF_buffer(ψ, x))
+    end
+
+    @testset "difference tables" begin
+        # one shared table, translation-invariant moves: the blocks are shared between clusters and moves
+        Nr = 6
+        Hilbert = BosonHilbertSpace(Nr, HardCoreConstraint())
+        ring = [[i, mod1(i + 1, Nr), mod1(i + 2, Nr)] for i in 1:Nr]
+        table = randn(rng, 8)
+        H = localOperator([(m = zeros(Bool, Nr); m[i] = true; m) for i in 1:Nr], -ones(Nr), ZeroDiagOperator(), Hilbert)
+        ψ = ClusterCPS(ring, table; moves = H.moves)
+        @test length(ψ.dtable) == 3 * 8              # a flip changes slot 1, 2 or 3 of a cluster
+        for r in eachindex(ψ.row_cluster), I in 0:7  # every entry is T[I ⊻ mask] - T[I]
+            @test ψ.dtable[ψ.row_dtable[r]+I] == table[(I ⊻ ψ.row_shift[r])+1] - table[I+1]
+        end
+
+        # additive moves: entries whose target pattern leaves the local states are NaN, never a wrapped pattern
+        Hilbert3 = BosonHilbertSpace(2, OccupationNumberConstraint(0, 2))
+        H3 = localOperator([Int8[1, -1], Int8[2, 0]], -ones(2), ZeroDiagOperator(), Hilbert3)
+        table3 = randn(rng, 9)
+        ψ3 = ClusterCPS([[1, 2]], table3; local_dim = 3, moves = H3.moves)
+        for (j, δ) in ((1, (1, -1)), (2, (2, 0)))
+            r = only(ψ3.row_ptr[j]:ψ3.row_ptr[j+1]-1)
+            for n1 in 0:2, n2 in 0:2
+                entry = ψ3.dtable[ψ3.row_dtable[r]+n1+3n2]
+                m1, m2 = n1 + δ[1], n2 + δ[2]
+                if 0 <= m1 <= 2 && 0 <= m2 <= 2
+                    @test entry == table3[m1+3m2+1] - table3[n1+3n2+1]
+                else
+                    @test isnan(entry)
+                end
+            end
+        end
+
+        # -Inf entries give -Inf differences into forbidden patterns
+        ψinf = ClusterCPS(ring, [0.0, 0.0, 0.0, -Inf, 0.0, 0.0, 0.0, 0.0]; moves = H.moves)
+        @test any(==(-Inf), ψinf.dtable) && !any(==(Inf), ψinf.dtable[ψinf.dtable_old .!= 4])
+    end
+
     @testset "duplicate, empty and heterogeneous move lists" begin
         Hilbert = BosonHilbertSpace(N, HardCoreConstraint())
         H = localOperator([Bool[1, 1, 0, 0, 0, 0, 0, 0], zeros(Bool, N), Bool[1, 1, 0, 0, 0, 0, 0, 0], Bool[0, 0, 0, 0, 0, 0, 0, 1]], -ones(4), ZeroDiagOperator(), Hilbert)
@@ -473,5 +534,11 @@ end
         Bm, Bg = GFMC.allocate_GWF_buffer(ψmixed, x), GFMC.allocate_GWF_buffer(ClusterCPS(clusters, tables, cluster_table), x)
         H_occ = BosonHilbertSpace(N, OccupationNumberConstraint(0, 1))
         @test GFMC.log_psi_diff(x, mixed[2], ψmixed, Bm, H_occ) ≈ GFMC.log_psi_diff(x, mixed[2], ClusterCPS(clusters, tables, cluster_table), Bg, H_occ) atol = 1e-12
+
+        # an additive move and a flip with the same digit change on the same table need separate difference blocks:
+        # adding a particle is only defined from n = 0, flipping also from n = 1
+        Hmix = GFMC.LocalOperator(GFMC.AbstractMove[GFMC.SparseMove([1], Int8[1]), GFMC.FlipMove([1]), GFMC.FlipMove([2])], -ones(3), ZeroDiagOperator())
+        ψadd_first = ClusterCPS([[1, 2]], randn(rng, 4); moves = Hmix.moves)
+        @test check_random_walk(ψadd_first, Hmix, BosonHilbertSpace(2, HardCoreConstraint()), BosonConfig(Bool[1, 0])) > 0
     end
 end

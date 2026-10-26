@@ -83,6 +83,7 @@ GreenFunctionMonteCarlo.reconfigurateWalkers!
 GreenFunctionMonteCarlo.reset_accumulator!
 GreenFunctionMonteCarlo.runGFMC!
 GreenFunctionMonteCarlo.save_params_dict
+GreenFunctionMonteCarlo.set_params!
 GreenFunctionMonteCarlo.saveObservables_after!
 GreenFunctionMonteCarlo.saveObservables_before!
 GreenFunctionMonteCarlo.set_zero!
