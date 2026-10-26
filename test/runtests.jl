@@ -630,6 +630,7 @@ end
 end
 
 include("Jastrow_tests.jl")
+include("ClusterCPS_tests.jl")
 include("parTemp_test.jl")
 @run_package_tests verbose=true
 
