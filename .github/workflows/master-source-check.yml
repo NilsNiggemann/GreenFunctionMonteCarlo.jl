@@ -1,0 +1,26 @@
+# Only allow pull requests into master that come from the dev branch of this repository.
+# Make the `source-is-dev` check required in the master ruleset to enforce this.
+
+name: Master source check
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [opened, reopened, synchronize, edited]
+
+jobs:
+  source-is-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require PRs into master to come from dev
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REF" != "dev" ] || [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::PRs into master must come from the 'dev' branch of $REPO (got '$HEAD_REPO:$HEAD_REF')."
+            exit 1
+          fi
+          echo "Source branch is dev."
