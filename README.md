@@ -1,5 +1,5 @@
 # GreenFunctionMonteCarlo.jl
-[![build](https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl/workflows/CI/badge.svg)](https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl/actions?query=workflow%3ACI) [![Documentation](https://img.shields.io/badge/docs-master-blue.svg)](https://NilsNiggemann.github.io/GreenFunctionMonteCarlo.jl/dev)
+[![build](https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl/workflows/CI/badge.svg)](https://github.com/NilsNiggemann/GreenFunctionMonteCarlo.jl/actions?query=workflow%3ACI) [![Documentation](https://img.shields.io/badge/docs-master-blue.svg)](https://NilsNiggemann.github.io/GreenFunctionMonteCarlo.jl/dev) [![Documentation (dev branch)](https://img.shields.io/badge/docs-dev_branch-orange.svg)](https://NilsNiggemann.github.io/GreenFunctionMonteCarlo.jl/dev-branch)
 <!-- Tidyverse lifecycle badges, see https://www.tidyverse.org/lifecycle/ Uncomment or delete as needed. -->
 ![lifecycle](https://img.shields.io/badge/lifecycle-experimental-orange.svg)<!--
 ![lifecycle](https://img.shields.io/badge/lifecycle-maturing-blue.svg)
