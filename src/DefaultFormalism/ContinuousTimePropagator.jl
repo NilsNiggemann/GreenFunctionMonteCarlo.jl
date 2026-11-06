@@ -12,7 +12,7 @@ A structure representing a imaginary time projection of a trial wavefunction, al
   indicating that it implements the required interface for propagators in the 
   Green Function Monte Carlo framework.
 # Fields 
-- `dτ::T`: The time step for the propagation, which is a floating-point value. A small value may be inefficient in exploring the Hilbert space, while a large value will lead to a more unstable propagation. A good starting point is `dτ = 0.1`.
+- `dτ::T`: The imaginary time between two reconfigurations (branching events). The propagation within `dτ` is exact (continuous-time sampling of the jump times), so there is **no Trotter / time-step error**: estimators are unbiased for any `dτ`. A small value may be inefficient in exploring the Hilbert space, while a large value will lead to a more unstable propagation (larger walker-weight fluctuations between reconfigurations). A good starting point is `dτ = 0.1`. A `dτ`-dependence of a result therefore signals a bug or a population-control effect, not a discretization error.
 - `w_avg_estimate::T`: An estimate of the average weight to reduce floating point errors. Ideally given by the exact ground state energy of the system.
 """
 struct ContinuousTimePropagator{T<:AbstractFloat} <: AbstractPropagator 
