@@ -58,6 +58,7 @@ function seed_from_main_population!(slot::ForwardWalkingSlot, Walkers::AbstractW
         move === nothing || post_move_affect!(Buffer, Config, move, logψ)
         slot.seed_weights[β] = w
     end
+    _reweight_seed!(slot.seed_weights, getWalkerWeights(Walkers))
 
     slot.origin .= eachindex(slot.origin)
     slot.n_seed = n
@@ -98,6 +99,7 @@ function seed_from_main_population!(group::AbstractVector{<:ForwardWalkingSlot},
             slot.seed_weights[β] = w
         end
     end
+    foreach(slot -> _reweight_seed!(slot.seed_weights, getWalkerWeights(Walkers)), group)
 
     for slot in group
         slot.origin .= eachindex(slot.origin)
@@ -108,6 +110,13 @@ function seed_from_main_population!(group::AbstractVector{<:ForwardWalkingSlot},
     end
     return group
 end
+
+# The seed is taken after propagation but before reconfiguration, so walker β still carries its
+# step weight w_β (the weight the reconfiguration would resample by, and that the diagonal mixed
+# estimator `getLocalEnergyWalkers_before` uses). Neither `Num` (cum_weight starts after the seed
+# step) nor `Denom` (Gnps window starts at n_seed+1) contains it, so it must enter the seed value:
+# omitting it biases ⟨O⟩ by ≈ -cov(w, O_loc)/w̄ (∝ dτ, zero for an exact guide).
+_reweight_seed!(seed_weights, walker_weights) = (seed_weights .*= walker_weights ./ Statistics.mean(walker_weights))
 
 # Propagates ancestry labels through one reconfiguration step: the walker now at slot α is a copy
 # of whatever was at pre-reconfiguration slot `reconfigurationList[α]`, so it inherits THAT slot's
