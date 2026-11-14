@@ -23,6 +23,7 @@ mutable struct ForwardWalkingSlot{WE<:AbstractWalkerEnsemble}
     origin::Vector{Int}            # origin[α]: which seed walker (1..Nsub) current walker α descends from
     origin_scratch::Vector{Int}    # reusable buffer for _propagate_origin!
     cum_weight::Float64            # population-level growth factor (shared across all Nsub walkers)
+    advanced::Bool                 # already advanced in the current main-loop step (by a joint pass, see `advance_forward_walking!`)
 end
 
 function allocate_forward_walking_slot(conf, logψ::AbstractGuidingFunction, Nsub::Integer, H::AbstractSignFreeOperator)
@@ -31,7 +32,7 @@ function allocate_forward_walking_slot(conf, logψ::AbstractGuidingFunction, Nsu
     seed_weights = zeros(Nsub)
     origin = collect(1:Nsub)
     origin_scratch = collect(1:Nsub)
-    return ForwardWalkingSlot(Walkers, reconfiguration, false, 0, 0, seed_weights, origin, origin_scratch, 1.0)
+    return ForwardWalkingSlot(Walkers, reconfiguration, false, 0, 0, seed_weights, origin, origin_scratch, 1.0, false)
 end
 
 # resolve_moves=true support: one "seed group" is n_moves independent ForwardWalkingSlots (one per
@@ -39,32 +40,70 @@ end
 allocate_forward_walking_group(conf, logψ::AbstractGuidingFunction, Nsub::Integer, H::AbstractSignFreeOperator, n_moves::Integer) =
     [allocate_forward_walking_slot(conf, logψ, Nsub, H) for _ in 1:n_moves]
 
-# Seeds `slot` from the CURRENTLY LIVE (pre-reconfiguration) main population `Walkers`, applying the
-# off-diagonal observable once per sub-walker. Direct analog of SpiderWebModel's
-# `initialize_forward_walking!`, but reading from the live population instead of a stored snapshot.
-function seed_from_main_population!(slot::ForwardWalkingSlot, Walkers::AbstractWalkerEnsemble, Observable::AbstractOffdiagonalObservable,
-                                     logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, n::Integer,
-                                     weights_buf::AbstractVector, rng::Random.AbstractRNG)
-    Nsub = NWalkers(slot.Walkers)
-    @assert Nsub == NWalkers(Walkers) "ForwardWalkingAccumulator requires Nsub == NWalkers(main population) for v1 (1:1 seed, no resampling); got Nsub=$Nsub, NWalkers(main)=$(NWalkers(Walkers))"
-
-    for β in 1:Nsub
-        Config = getConfig(slot.Walkers, β)
-        Config .= getConfig(Walkers, β)
-        Buffer = getBuffer(slot.Walkers, β)
-        compute_GWF_buffer!(Buffer, logψ, Config)
-        get_observable_weights!(weights_buf, Config, Observable, logψ, Hilbert, Buffer)
-        move, w = sample_and_apply_observable!(Config, weights_buf, Observable, rng)
-        move === nothing || post_move_affect!(Buffer, Config, move, logψ)
-        slot.seed_weights[β] = w
+# Runs `f(k, tid)` for every `k in 1:n`, where `tid` indexes per-thread scratch (RNGs, weight
+# buffers). Serial for `SingleThreaded`, one Polyester batch otherwise (Polyester tasks are sticky, so
+# `Threads.threadid()` is a valid per-thread index, as in `polyester_get_task_local_idx`).
+function _fw_foreach!(f::F, n::Integer, ::SingleThreaded) where {F}
+    for k in 1:n
+        f(k, 1)
     end
-    _reweight_seed!(slot.seed_weights, getWalkerWeights(Walkers))
+    return nothing
+end
+function _fw_foreach!(f::F, n::Integer, parallelization::AbstractParallelizationScheme) where {F}
+    n == 0 && return nothing
+    minbatch = clamp(n ÷ num_tasks(parallelization), 1, n)
+    Polyester.@batch per=thread minbatch=minbatch for k in 1:n
+        f(k, Threads.threadid())
+    end
+    return nothing
+end
 
+# Number of per-thread scratch copies (RNGs, weight buffers) indexed by `tid` in `_fw_foreach!`.
+_fw_num_scratch(parallelization::SingleThreaded) = 1
+_fw_num_scratch(parallelization::AbstractParallelizationScheme) = max(num_tasks(parallelization), Threads.maxthreadid())
+
+function _mark_seeded!(slot::ForwardWalkingSlot, n::Integer)
     slot.origin .= eachindex(slot.origin)
     slot.n_seed = n
     slot.step = 0
     slot.cum_weight = 1.0
     slot.active = true
+    slot.advanced = false
+    return slot
+end
+
+# Seeds `slot` from the CURRENTLY LIVE (pre-reconfiguration) main population `Walkers`, applying the
+# off-diagonal observable once per sub-walker. Direct analog of SpiderWebModel's
+# `initialize_forward_walking!`, but reading from the live population instead of a stored snapshot.
+# Sub-walkers are independent, so the loop over them runs in parallel; `weights_bufs[tid]` and
+# `RNGs[tid]` are per-thread scratch (see `_fw_foreach!`).
+function seed_from_main_population!(slot::ForwardWalkingSlot, Walkers::AbstractWalkerEnsemble, Observable::AbstractOffdiagonalObservable,
+                                     logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, n::Integer,
+                                     weights_bufs::AbstractVector{<:AbstractVector}, RNGs::AbstractVector{<:Random.AbstractRNG},
+                                     parallelization::AbstractParallelizationScheme)
+    Nsub = NWalkers(slot.Walkers)
+    @assert Nsub == NWalkers(Walkers) "ForwardWalkingAccumulator requires Nsub == NWalkers(main population) for v1 (1:1 seed, no resampling); got Nsub=$Nsub, NWalkers(main)=$(NWalkers(Walkers))"
+
+    _fw_foreach!(Nsub, parallelization) do β, tid
+        _seed_walker!(slot, β, getConfig(Walkers, β), Observable, logψ, Hilbert, weights_bufs[tid], RNGs[tid])
+    end
+    _reweight_seed!(slot.seed_weights, getWalkerWeights(Walkers))
+    return _mark_seeded!(slot, n)
+end
+
+# Serial single-buffer convenience method.
+seed_from_main_population!(slot::ForwardWalkingSlot, Walkers::AbstractWalkerEnsemble, Observable::AbstractOffdiagonalObservable, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, n::Integer, weights_buf::AbstractVector{<:Real}, rng::Random.AbstractRNG) =
+    seed_from_main_population!(slot, Walkers, Observable, logψ, Hilbert, n, [weights_buf], [rng], SingleThreaded())
+
+function _seed_walker!(slot::ForwardWalkingSlot, β::Integer, x::AbstractConfig, Observable::AbstractOffdiagonalObservable, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, weights_buf::AbstractVector, rng::Random.AbstractRNG)
+    Config = getConfig(slot.Walkers, β)
+    Config .= x
+    Buffer = getBuffer(slot.Walkers, β)
+    compute_GWF_buffer!(Buffer, logψ, Config)
+    get_observable_weights!(weights_buf, Config, Observable, logψ, Hilbert, Buffer)
+    move, w = sample_and_apply_observable!(Config, weights_buf, Observable, rng)
+    move === nothing || post_move_affect!(Buffer, Config, move, logψ)
+    slot.seed_weights[β] = w
     return slot
 end
 
@@ -72,43 +111,44 @@ end
 # EVERY move (not stochastically sampling one) to its own copy of each main-population walker. Unlike
 # `sample_and_apply_observable!`'s single-sample sum estimator, this gives each slot the exact
 # per-move mixed-estimator seed weight `ψ(x'_i)/ψ(x)` for every sub-walker, since nothing here is
-# randomly chosen.
+# randomly chosen. Parallel over (walker, move) pairs.
 function seed_from_main_population!(group::AbstractVector{<:ForwardWalkingSlot}, Walkers::AbstractWalkerEnsemble, Observable::AbstractOffdiagonalObservable,
-                                     logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, n::Integer, rng::Random.AbstractRNG)
+                                     logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, n::Integer,
+                                     parallelization::AbstractParallelizationScheme = SingleThreaded())
     n_mv = n_moves(Observable)
     @assert length(group) == n_mv "resolve_moves seed group size ($(length(group))) must match n_moves(Observable) ($n_mv)"
 
     Nsub = NWalkers(group[1].Walkers)
     @assert Nsub == NWalkers(Walkers) "ForwardWalkingAccumulator requires Nsub == NWalkers(main population) for v1 (1:1 seed, no resampling); got Nsub=$Nsub, NWalkers(main)=$(NWalkers(Walkers))"
 
-    for β in 1:Nsub
-        x = getConfig(Walkers, β)
-        for i in 1:n_mv
-            slot = group[i]
-            Config = getConfig(slot.Walkers, β)
-            Config .= x
-            Buffer = getBuffer(slot.Walkers, β)
-            compute_GWF_buffer!(Buffer, logψ, Config)
-            pre_move_affect!(Buffer, Config, logψ)
-            move = get_move(Observable, i)
-            Δ = log_psi_diff(Config, move, logψ, Buffer, Hilbert)
-            ψratio = exp(Δ)
-            w = observable_weight(Observable, i, ψratio, Config)
-            apply!(Config, move)
-            post_move_affect!(Buffer, Config, move, logψ)
-            slot.seed_weights[β] = w
-        end
+    _fw_foreach!(Nsub * n_mv, parallelization) do k, _
+        i, β = divrem(k - 1, Nsub) .+ 1
+        _seed_walker_move!(group[i], β, getConfig(Walkers, β), Observable, i, logψ, Hilbert)
     end
-    foreach(slot -> _reweight_seed!(slot.seed_weights, getWalkerWeights(Walkers)), group)
-
     for slot in group
-        slot.origin .= eachindex(slot.origin)
-        slot.n_seed = n
-        slot.step = 0
-        slot.cum_weight = 1.0
-        slot.active = true
+        _reweight_seed!(slot.seed_weights, getWalkerWeights(Walkers))
+        _mark_seeded!(slot, n)
     end
     return group
+end
+
+function _seed_walker_move!(slot::ForwardWalkingSlot, β::Integer, x::AbstractConfig, Observable::AbstractOffdiagonalObservable, i::Integer, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace)
+    Config = getConfig(slot.Walkers, β)
+    Config .= x
+    Buffer = getBuffer(slot.Walkers, β)
+    compute_GWF_buffer!(Buffer, logψ, Config)
+    pre_move_affect!(Buffer, Config, logψ)
+    move = get_move(Observable, i)
+    Δ = log_psi_diff(Config, move, logψ, Buffer, Hilbert)
+    w = observable_weight(Observable, i, exp(Δ), Config)
+    slot.seed_weights[β] = w
+    # A zero-weight move may be forbidden in `Config` (e.g. a non-flippable plaquette): don't apply
+    # it, exactly like `sample_and_apply_observable!` returns `nothing` for zero total weight. The
+    # walker then carries seed weight 0 and contributes nothing to Num.
+    iszero(w) && return slot
+    apply!(Config, move)
+    post_move_affect!(Buffer, Config, move, logψ)
+    return slot
 end
 
 # The seed is taken after propagation but before reconfiguration, so walker β still carries its
@@ -131,24 +171,60 @@ function _propagate_origin!(origin::Vector{Int}, scratch::Vector{Int}, reconfigu
     return origin
 end
 
-# Advances `slot` by exactly one propagation+reconfiguration step, reusing the ordinary propagator
-# and reconfiguration scheme completely unmodified. Updates `slot.cum_weight` (the shared
-# population-level growth factor) and `slot.origin` (exact per-walker seed ancestry).
-function advance_slot!(slot::ForwardWalkingSlot, propagator::AbstractPropagator, logψ::AbstractGuidingFunction,
+"""
+    propagate_walker!(WE, α, H, logψ, Hilbert, propagator, rng)
+
+Propagate the single walker `α` of `WE` by one step of `propagator`. Used by forward walking to
+propagate walkers of many sub-populations in one parallel loop.
+"""
+propagate_walker!(WE::AbstractWalkerEnsemble, α::Integer, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, p::ContinuousTimePropagator, rng::Random.AbstractRNG) =
+    continuos_time_propagation_walker!(WE, α, H, logψ, Hilbert, p.dτ, p.w_avg_estimate, rng)
+propagate_walker!(WE::AbstractWalkerEnsemble, α::Integer, H::AbstractSignFreeOperator, logψ::AbstractGuidingFunction, Hilbert::AbstractHilbertSpace, p::DiscretePropagator, rng::Random.AbstractRNG) =
+    discrete_time_propagation_walker!(WE, α, H, logψ, Hilbert, p.Λ, p.nBranch, p.w_avg_estimate, rng)
+
+# Advances every slot in `slots` by exactly one propagation+reconfiguration step, reusing the ordinary
+# per-walker propagator and reconfiguration scheme unmodified. Updates each `slot.cum_weight` (the
+# shared population-level growth factor) and `slot.origin` (exact per-walker seed ancestry).
+#
+# All (slot, walker) pairs are propagated in ONE parallel loop, then the slots are reconfigured in a
+# second parallel loop (each slot's reconfiguration is serial and independent of the others). This
+# replaces one small parallel region plus a serial reconfiguration per slot, whose launch and
+# synchronisation overhead dominated when Nsub is small. `RNGs[tid]` is per-thread scratch.
+function advance_slots!(slots::AbstractVector{<:ForwardWalkingSlot}, propagator::AbstractPropagator, logψ::AbstractGuidingFunction,
                         H::AbstractSignFreeOperator, Hilbert::AbstractHilbertSpace, w_avg_estimate::Real,
-                        parallelization::AbstractParallelizationScheme, rng::Random.AbstractRNG)
-    # propagateWalkers!/reconfigurateWalkers! take a Vector of per-task RNGs (to support
-    # MultiThreaded/BatchMultiThreaded), matching how runGFMC!'s own main loop derives RNGs from a
-    # single rng via duplicate_rng -- mirror that here rather than passing FW's scalar rng directly.
-    RNGs = duplicate_rng(rng, num_tasks(parallelization))
-    propagateWalkers!(slot.Walkers, H, logψ, Hilbert, propagator, parallelization, RNGs)
+                        parallelization::AbstractParallelizationScheme, RNGs::AbstractVector{<:Random.AbstractRNG})
+    isempty(slots) && return slots
+    Nsub = NWalkers(first(slots).Walkers)
+    _fw_foreach!(length(slots) * Nsub, parallelization) do k, tid
+        s, α = divrem(k - 1, Nsub) .+ 1
+        propagate_walker!(slots[s].Walkers, α, H, logψ, Hilbert, propagator, RNGs[tid])
+    end
+    _fw_foreach!(length(slots), parallelization) do s, tid
+        _reconfigure_slot!(slots[s], w_avg_estimate, RNGs[tid])
+    end
+    return slots
+end
+
+function _reconfigure_slot!(slot::ForwardWalkingSlot, w_avg_estimate::Real, rng::Random.AbstractRNG)
     branch_weight = Statistics.mean(getWalkerWeights(slot.Walkers))
     slot.cum_weight *= branch_weight / w_avg_estimate
-    reconfigurateWalkers!(slot.Walkers, slot.reconfiguration, parallelization, RNGs)
+    reconfigurateWalkers!(slot.Walkers, slot.reconfiguration, SingleThreaded(), _single_rng_vector(rng))
     _propagate_origin!(slot.origin, slot.origin_scratch, get_reconfigurationList(slot.reconfiguration))
     slot.step += 1
     return slot
 end
+
+# `reconfigurateWalkers!` takes a Vector of RNGs; SingleThreaded only reads the first. A 1-element
+# vector is a small allocation per slot and step, negligible next to the reconfiguration itself.
+_single_rng_vector(rng::R) where {R<:Random.AbstractRNG} = R[rng]
+
+# Single-slot convenience method.
+function advance_slot!(slot::ForwardWalkingSlot, propagator::AbstractPropagator, logψ::AbstractGuidingFunction, H::AbstractSignFreeOperator, Hilbert::AbstractHilbertSpace, w_avg_estimate::Real, parallelization::AbstractParallelizationScheme, RNGs::AbstractVector{<:Random.AbstractRNG})
+    advance_slots!([slot], propagator, logψ, H, Hilbert, w_avg_estimate, parallelization, RNGs)
+    return slot
+end
+advance_slot!(slot::ForwardWalkingSlot, propagator::AbstractPropagator, logψ::AbstractGuidingFunction, H::AbstractSignFreeOperator, Hilbert::AbstractHilbertSpace, w_avg_estimate::Real, parallelization::AbstractParallelizationScheme, rng::Random.AbstractRNG) =
+    advance_slot!(slot, propagator, logψ, H, Hilbert, w_avg_estimate, parallelization, duplicate_rng(rng, _fw_num_scratch(parallelization)))
 
 # The forward-walking estimator's per-slot contribution to Num at the slot's current projection
 # order: the EXACT descendant-weighted average of the seed observable values (see the type
