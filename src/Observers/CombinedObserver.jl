@@ -15,6 +15,7 @@ struct CombinedObserver{T} <: AbstractObserver
 end
 
 function saveObservables_before!(Observer::CombinedObserver,i,Walkers::AbstractWalkerEnsemble,H::AbstractSignFreeOperator,reconfiguration::AbstractReconfigurationScheme)
+    advance_forward_walking!(Observer.Observers, i, H) # joint pass over all ForwardWalkingAccumulators (no-op if none)
     map(Observer.Observers) do obs # use map for loop unrolling and type stability
         saveObservables_before!(obs,i,Walkers,H,reconfiguration)
     end

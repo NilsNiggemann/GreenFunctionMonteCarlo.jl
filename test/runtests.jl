@@ -693,6 +693,7 @@ end
     NWalkers = 4
     Walkers = GFMC.allocate_walkerEnsemble(config, logψ, NWalkers, H)
     GFMC.compute_GWF_buffers!(Walkers, logψ)
+    GFMC.getWalkerWeights(Walkers) .= 1  # seeds are reweighted by the walker step weights (zero after allocation)
 
     CT = ContinuousTimePropagator(1.)
     mProj = 4
@@ -710,7 +711,7 @@ end
         @test slots[1].n_seed == 1
         @test slots[1].step == 0
         @test slots[1].cum_weight == 1.0
-        @test isfinite(slots[1].seed_weight)
+        @test all(isfinite, slots[1].seed_weights)
 
         for _ in 1:mProj
             GFMC.advance_slot!(slots[1], CT, logψ, H, Hilbert, 1.0, GFMC.SingleThreaded(), RNG)
@@ -805,6 +806,208 @@ end
         # expectation value as p=0 (seed weight only, the biased mixed estimator).
         @test abs(estimate[end] - O_exact) <= abs(estimate[1] - O_exact) + 0.2
     end
+end
+
+@testitem "Forward Walking resolve_moves skips forbidden moves" begin
+    # resolve_moves applies every move to its own copy of each walker. A move that is forbidden in the
+    # walker's configuration (zero weight) must not be applied: with a hard-core constraint it used to
+    # throw InexactError (Bool(2)).
+    include("utils.jl")
+    Hilbert = BosonHilbertSpace(2, HardCoreConstraint())
+    logψ = GFMC.EqualWeightSuperposition()
+    H = localOperator([Bool[1, 0], Bool[0, 1]], [-1.0, -1.0], ZeroDiagOperator(), Hilbert)
+    moves = [Int8[1, -1], Int8[-1, 1]]
+    valid(x, m) = all(i -> 0 <= x[i] + m[i] <= 1, eachindex(m))
+    Observable = GFMC.offdiagonalObservable(moves, (idx, ψratio, x) -> valid(x, moves[idx]) ? ψratio : 0.0, Hilbert)
+    config = BosonConfig(Hilbert)
+    config .= Bool[0, 1]
+    Walkers = GFMC.allocate_walkerEnsemble(config, logψ, 2, H)
+    foreach(α -> GFMC.getConfig(Walkers, α) .= config, 1:2)
+    GFMC.getWalkerWeights(Walkers) .= 1
+    group = GFMC.allocate_forward_walking_group(config, logψ, 2, H, 2)
+    GFMC.seed_from_main_population!(group, Walkers, Observable, logψ, Hilbert, 1)
+    @test group[1].seed_weights == [1.0, 1.0]
+    @test all(α -> GFMC.getConfig(group[1].Walkers, α) == Bool[1, 0], 1:2)
+    @test group[2].seed_weights == [0.0, 0.0]
+    @test all(α -> GFMC.getConfig(group[2].Walkers, α) == Bool[0, 1], 1:2)
+end
+
+@testitem "Forward Walking multithreaded joint advance vs ED" begin
+    # Several ForwardWalkingAccumulators in one CombinedObserver are advanced in one joint parallel
+    # pass (advance_forward_walking!). Checks that (i) every active slot is advanced exactly once per
+    # step, and (ii) the multithreaded estimates agree with exact diagonalization, for both the summed
+    # (resolve_moves=false) and the per-move (resolve_moves=true) observable.
+    include("utils.jl")
+    using GreenFunctionMonteCarlo.LinearAlgebra
+    using GreenFunctionMonteCarlo.Statistics
+
+    NSites = 6
+    (; Hilbert, H) = getMinimalExample(NSites, 1.0, 1.0)
+    Observable = GFMC.offdiagonalObservable(collect(eachcol(Bool.(I(NSites)))), (idx, ψratio, x) -> ψratio, Hilbert)
+
+    basis = [BosonConfig(Bool.(digits(k, base = 2, pad = NSites))) for k in 0:2^NSites-1]
+    idx_of(x) = findfirst(==(x), basis)
+    Hmat = zeros(length(basis), length(basis))
+    Xmat = zeros(length(basis), length(basis))  # σx on site 1
+    for (n, x) in enumerate(basis)
+        Hmat[n, n] = GFMC.get_diagonal(H)(x)
+        for i in 1:NSites
+            y = copy(x)
+            GFMC.apply!(y, GFMC.get_move(H, i))
+            Hmat[n, idx_of(y)] += -1.0
+            i == 1 && (Xmat[n, idx_of(y)] += 1.0)
+        end
+    end
+    ψ0 = eigen(Symmetric(Hmat)).vectors[:, 1]
+    X_exact = ψ0' * Xmat * ψ0  # translation invariant (periodic Hxx_TFI): same on every site
+
+    NWalkers = 200
+    NSteps = 3000
+    mProj = 12
+    cadence = 3
+    num_bins = 30
+    par = GFMC.BatchMultiThreaded(2 * Threads.nthreads())
+    logψ = GFMC.EqualWeightSuperposition()
+    config = BosonConfig(Hilbert)
+    rand!(StableRNG(5), config)
+    prob = GFMCProblem(config, NWalkers, ContinuousTimePropagator(0.1); logψ, H, Hilbert, parallelization = par)
+    mean_w, w_avg = GFMC.estimate_weights_continuousTime!(prob; Nepochs = 5, Nsamples = 200, logger = nothing)
+    CT = ContinuousTimePropagator(0.1, w_avg)
+    runGFMC!(prob, NoObserver(), 300; Propagator = CT, logger = NoLogger(), rng = StableRNG(6))
+
+    BAcc = GFMC.BasicAccumulator(nothing, 10, NWalkers; weight_normalization = mean_w, num_bins, bin_elements = cld(NSteps, num_bins))
+    FWsum = GFMC.ForwardWalkingAccumulator(Observable, BAcc, config, logψ, H, Hilbert, CT, mProj, cadence, NWalkers; parallelization = par, rng = StableRNG(7), num_bins)
+    FWmoves = GFMC.ForwardWalkingAccumulator(Observable, BAcc, config, logψ, H, Hilbert, CT, mProj, cadence, NWalkers; parallelization = par, rng = StableRNG(8), num_bins, resolve_moves = true)
+    FWsum2 = GFMC.ForwardWalkingAccumulator(Observable, BAcc, config, logψ, H, Hilbert, CT, mProj, 2, NWalkers; parallelization = par, rng = StableRNG(9), num_bins)
+    Observer = CombinedObserver((BAcc, FWsum, FWmoves, FWsum2))
+
+    @testset "each slot advances once per step" begin
+        runGFMC!(prob, Observer, 1:10; Propagator = CT, logger = NoLogger(), rng = StableRNG(10))
+        n = 10
+        for FW in (FWsum, FWmoves, FWsum2), slot in GFMC._flat_slots(FW.slots)
+            slot.active || continue
+            @test slot.step == n - slot.n_seed
+            @test !slot.advanced
+        end
+    end
+
+    runGFMC!(prob, Observer, 11:NSteps; Propagator = CT, logger = NoLogger(), rng = StableRNG(11))
+
+    @testset "multithreaded FW matches ED" begin
+        est_sum = mean(GFMC.get_observable_from_accumulator_bunching(FWsum, 1))
+        est_sum2 = mean(GFMC.get_observable_from_accumulator_bunching(FWsum2, 1))
+        est_moves = mean(GFMC.get_observable_from_accumulator_bunching(FWmoves, 1))
+        @test isapprox(est_sum[end] / NSites, X_exact; rtol = 0.02)
+        @test isapprox(est_sum2[end] / NSites, X_exact; rtol = 0.02)
+        @test all(isapprox.(est_moves[:, end], X_exact; rtol = 0.05))
+    end
+end
+
+@testitem "MinimalReconfiguration records true walker ancestry" begin
+    # Regression test for a bug where minimizeReconfiguration! computed the correct walker
+    # ensemble (statistically) but left reconfigurationList (saved verbatim into
+    # reconfigurationTable) out of sync with the copies actually performed by _replace_walkers!,
+    # silently biasing every diagonal-observable backward-population trace (getPopulationMatrix!)
+    # while leaving getEnergies (which never touches reconfigurationTable) unaffected.
+    include("utils.jl")
+
+    NWalkers = 20
+    # getExampleHardcore uses ZeroDiagOperator() -- with EqualWeightSuperposition, every walker's
+    # branching weight update is then identical regardless of its configuration, so
+    # MinimalReconfiguration is (correctly) a documented no-op and this test would never exercise
+    # any actual copies. getMinimalExample (a real TFI diagonal energy) gives genuine per-walker
+    # weight spread instead.
+    (;Hilbert,H) = getMinimalExample(6, 1.0, 1.0)
+
+    config = BosonConfig(Hilbert)
+    rand!(StableRNG(22), config)
+    logψ = GFMC.EqualWeightSuperposition()
+    CT = ContinuousTimePropagator(0.3)
+    prob = GFMCProblem(config, NWalkers, CT; logψ, H, Hilbert, parallelization = GFMC.SingleThreaded())
+
+    # Propagate a few real steps (no reconfiguration yet) so walker weights become genuinely
+    # unequal -- MinimalReconfiguration is a documented no-op for identical weights, which
+    # wouldn't exercise the copy/ancestry-recording logic this test targets at all.
+    RNGs = [StableRNG(33)]
+    for _ in 1:3
+        GFMC.propagateWalkers!(prob.Walkers, H, logψ, Hilbert, CT, GFMC.SingleThreaded(), RNGs)
+    end
+
+    pre_configs = [copy(GFMC.getConfig(prob.Walkers, α)) for α in 1:NWalkers]
+
+    reconfiguration = GFMC.MinimalReconfiguration(NWalkers)
+    GFMC.reconfigurateWalkers!(prob.Walkers, reconfiguration, GFMC.SingleThreaded(), RNGs)
+    # Sanity check that this scenario actually exercises real branching/death -- otherwise the
+    # test below would trivially pass without ever touching the bug it's meant to catch.
+    @test !isempty(reconfiguration.dead_walkers)
+
+    list = GFMC.get_reconfigurationList(reconfiguration)
+    @testset "reconfigurationList matches actual copies" begin
+        for α in 1:NWalkers
+            @test GFMC.getConfig(prob.Walkers, α) == pre_configs[list[α]]
+        end
+    end
+end
+
+@testitem "TFI L=3 open BC with Jastrow vs exact diagonalization" begin
+    include("utils.jl")
+    using GreenFunctionMonteCarlo.LinearAlgebra
+    using GreenFunctionMonteCarlo.SparseArrays
+
+    L = 3
+    h, J = 0.4, 1.0
+
+    Hilbert = BosonHilbertSpace(L, HardCoreConstraint())
+    moves = [Bool[0 for _ in 1:L] for _ in 1:L]
+    offdiagElements = zeros(Float64, L)
+    for i in eachindex(moves)
+        moves[i][i] = true
+        offdiagElements[i] = -h
+    end
+    Hxx(conf) = -J * sum(σz(i, conf) * σz(i + 1, conf) for i in eachindex(conf)[1:end-1])
+    H = localOperator(moves, offdiagElements, DiagOperator(Hxx), Hilbert)
+
+    # Exact diagonalization reference (open BC; L=3 -> 2^3=8 states, trivial dense construction).
+    # Convention: site 1 is the leftmost/most-significant tensor factor -- this only needs to be
+    # self-consistent between the Hamiltonian and the Sz_i operators below, not matched to any
+    # external convention.
+    id = sparse(1.0I, 2, 2)
+    σxmat = sparse([0.0 1.0; 1.0 0.0])
+    σzmat = sparse([1.0 0.0; 0.0 -1.0])
+    siteop(op, i) = foldl(kron, [k == i ? op : id for k in 1:L])
+    Sz = [siteop(σzmat, i) for i in 1:L]
+    Hmat = -J * sum(Sz[i] * Sz[i+1] for i in 1:(L-1)) - h * sum(siteop(σxmat, i) for i in 1:L)
+    evals, evecs = eigen(Symmetric(Matrix(Hmat)))
+    E0_exact = evals[1]
+    ψ0 = evecs[:, 1]
+    SzSz_exact = [ψ0' * (Sz[i] * Sz[j]) * ψ0 for i in 1:L, j in 1:L]
+
+    # Decent (non-trivial) nearest-neighbor Jastrow guiding function on the hardcore-boson
+    # representation -- EqualWeightSuperposition converges too slowly for a tight test.
+    vij_jastrow = zeros(Float32, L, L)
+    for i in 1:(L-1)
+        vij_jastrow[i, i+1] = vij_jastrow[i+1, i] = 0.5f0
+    end
+    logψ = Jastrow(zeros(Float32, L), vij_jastrow)
+
+    startConfig = BosonConfig(Hilbert)
+    NWalkers = 300
+    NSteps = 3000
+    mProj = 30
+    propagator = ContinuousTimePropagator(0.1)
+
+    problem = GFMCProblem(startConfig, NWalkers, propagator; logψ, H, Hilbert)
+    runGFMC!(problem, NoObserver(), 400; rng = StableRNG(101))
+    ConfObs = ConfigObserver(startConfig, NSteps, NWalkers)
+    runGFMC!(problem, ConfObs, NSteps; rng = StableRNG(202))
+
+    E_gfmc = getEnergies(ConfObs, mProj)[end]
+    @test isapprox(E_gfmc, E0_exact; atol = 0.1)
+
+    SpinCorr = SpinCorrelations(L)
+    SzSz_res = getObs_diagonal(ConfObs, SpinCorr, 1:mProj)
+    SzSz_mat = get_matrix_from_tri(SzSz_res[end], SpinCorr.i_inds, SpinCorr.j_inds)
+    @test all(isapprox.(SzSz_mat, SzSz_exact; atol = 0.05))
 end
 
 include("Jastrow_tests.jl")

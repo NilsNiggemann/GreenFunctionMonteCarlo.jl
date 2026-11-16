@@ -53,7 +53,7 @@ When `Observable` covers more than one move (see [`offdiagonalObservable`](@ref)
 constructor keyword controls whether the result is their combined *sum* (default) or a genuine
 per-move breakdown — see the constructor docstring below.
 """
-struct ForwardWalkingAccumulator{ObsType<:AbstractOffdiagonalObservable,SlotType,Prop<:AbstractPropagator,GF<:AbstractGuidingFunction,HS<:AbstractHilbertSpace,PS<:AbstractParallelizationScheme,T_high<:AbstractFloat,NA<:AbstractArray{Float64}} <: AbstractObserver
+struct ForwardWalkingAccumulator{ObsType<:AbstractOffdiagonalObservable,SlotType,Prop<:AbstractPropagator,GF<:AbstractGuidingFunction,HS<:AbstractHilbertSpace,PS<:AbstractParallelizationScheme,T_high<:AbstractFloat,NA<:AbstractArray{Float64},RNG<:Random.AbstractRNG,FS<:ForwardWalkingSlot} <: AbstractObserver
     BasicAcc::BasicAccumulator{T_high}
     Observable::ObsType
     slots::Vector{SlotType}
@@ -63,8 +63,9 @@ struct ForwardWalkingAccumulator{ObsType<:AbstractOffdiagonalObservable,SlotType
     logψ::GF
     Hilbert::HS
     parallelization::PS
-    weights_buf::Vector{Float64}
-    rng::Random.AbstractRNG
+    weights_bufs::Vector{Vector{Float64}}  # per-thread scratch for seeding
+    RNGs::Vector{RNG}                       # per-thread RNGs, allocated once
+    pending::Vector{FS}                     # reusable list of slots to advance in the current step
     Num::NA
     Denom::Matrix{Float64}
 end
@@ -88,8 +89,8 @@ Construct a [`ForwardWalkingAccumulator`](@ref) for measuring `⟨Observable⟩`
 - `Nsub::Integer`: size of each forward-walking sub-population. Must equal the main population's `NWalkers` (v1: 1:1 seeding, no resampling).
 
 # Keyword Arguments
-- `parallelization`: parallelization scheme for advancing sub-populations. Default `SingleThreaded()`.
-- `rng`: random number generator used for seeding/advancing sub-populations. Note that `saveObservables_before!`/`_after!` do not receive the main loop's RNG, so this accumulator owns its own stream.
+- `parallelization`: parallelization scheme for seeding and advancing sub-populations. Default `SingleThreaded()`. Any other scheme runs seeding over walkers, propagation over all (sub-population, walker) pairs, and reconfiguration over sub-populations as Polyester batches. When several `ForwardWalkingAccumulator`s sit in one `CombinedObserver`, their sub-populations are advanced together in one joint pass (see `advance_forward_walking!`).
+- `rng`: random number generator from which the per-thread RNGs used for seeding/advancing sub-populations are derived once, at construction. Note that `saveObservables_before!`/`_after!` do not receive the main loop's RNG, so this accumulator owns its own streams. With a multithreaded `parallelization` the result is not bitwise reproducible (walkers are assigned to threads dynamically), as for the main loop.
 - `num_bins`: number of bins for error-bar bunching (default: `BasicAcc`'s own).
 - `resolve_moves::Bool`: if `false` (default), `Observable`'s moves are combined into a single
   scalar estimate per projection order — for a single-move `Observable` this is `⟨move⟩` itself; for
@@ -116,7 +117,9 @@ function ForwardWalkingAccumulator(filename, Observable::AbstractOffdiagonalObse
 
     n_slots = fld(mProj, cadence) + 1
     n_mv = n_moves(Observable)
-    weights_buf = zeros(n_mv)
+    n_scratch = _fw_num_scratch(parallelization)
+    weights_bufs = [zeros(n_mv) for _ in 1:n_scratch]
+    RNGs = duplicate_rng(rng, n_scratch)
 
     Denom = maybe_MMap_array(filename, "$(_type_stripped(Observable))_ForwardWalking_denominator", Float64, (mProj + 1, num_bins))
 
@@ -128,77 +131,129 @@ function ForwardWalkingAccumulator(filename, Observable::AbstractOffdiagonalObse
         Num = maybe_MMap_array(filename, "$(_type_stripped(Observable))_ForwardWalking_numerator", Float64, (mProj + 1, num_bins))
     end
 
+    pending = similar(_flat_slots(slots), 0)
     return ForwardWalkingAccumulator(BasicAcc, Observable, slots, Int(cadence), Int(mProj), propagator, logψ, Hilbert,
-                                      parallelization, weights_buf, rng, Num, Denom)
+                                      parallelization, weights_bufs, RNGs, pending, Num, Denom)
 end
 
 function ForwardWalkingAccumulator(Observable::AbstractOffdiagonalObservable, BasicAcc::BasicAccumulator, args...; kwargs...)
     return ForwardWalkingAccumulator(nothing, Observable, BasicAcc, args...; kwargs...)
 end
 
-function saveObservables_before!(FW::ForwardWalkingAccumulator, n, Walkers::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, reconfiguration::AbstractReconfigurationScheme)
-    bin_index = get_bin_index(n, FW.BasicAcc)
+_flat_slots(slots::AbstractVector{<:ForwardWalkingSlot}) = slots
+_flat_slots(groups::AbstractVector{<:AbstractVector{<:ForwardWalkingSlot}}) = reduce(vcat, groups)
 
-    for slot in FW.slots
-        slot.active || continue
-        advance_slot!(slot, FW.propagator, FW.logψ, H, FW.Hilbert, FW.BasicAcc.weight_normalization[], FW.parallelization, FW.rng)
-        c = slot.step + 1
+# Appends to `out` every active slot of `FW` that has not yet been advanced in this step.
+function _collect_pending_slots!(out::AbstractVector, FW::ForwardWalkingAccumulator)
+    for slot_or_group in FW.slots
+        for slot in _as_group(slot_or_group)
+            slot.active && !slot.advanced && push!(out, slot)
+        end
+    end
+    return out
+end
+_as_group(slot::ForwardWalkingSlot) = (slot,)
+_as_group(group::AbstractVector{<:ForwardWalkingSlot}) = group
+
+# FW accumulators that can be advanced in one joint pass with `ref`: same propagation dynamics,
+# reference population and slot type.
+_can_advance_jointly(ref::ForwardWalkingAccumulator, FW::ForwardWalkingAccumulator) =
+    FW.BasicAcc === ref.BasicAcc && FW.propagator == ref.propagator && FW.logψ === ref.logψ && FW.Hilbert === ref.Hilbert && eltype(FW.pending) === eltype(ref.pending)
+
+_forward_walking_accumulators() = ()
+_forward_walking_accumulators(FW::ForwardWalkingAccumulator, rest...) = (FW, _forward_walking_accumulators(rest...)...)
+_forward_walking_accumulators(C::CombinedObserver, rest...) = (_forward_walking_accumulators(C.Observers...)..., _forward_walking_accumulators(rest...)...)
+_forward_walking_accumulators(_, rest...) = _forward_walking_accumulators(rest...)
+
+"""
+    advance_forward_walking!(observers, n, H)
+
+Advance, by one step, every active forward-walking sub-population of all
+[`ForwardWalkingAccumulator`](@ref)s among `observers` (a tuple; nested `CombinedObserver`s are
+searched too) in one joint pass: a single parallel loop over all (sub-population, walker) pairs, then
+a single parallel loop over sub-populations for reconfiguration. Called by `CombinedObserver` before
+its observers record, so that ~`n_accumulators * (fld(mProj, cadence) + 1)` small parallel regions per
+step become two large ones. Accumulators whose propagator, guide, Hilbert space or `BasicAcc` differ
+from the first one's are left alone and advance themselves in their own `saveObservables_before!`.
+Uses the first accumulator's `parallelization` and RNGs.
+"""
+advance_forward_walking!(observers::Tuple, n, H::AbstractSignFreeOperator) = _advance_jointly!(_forward_walking_accumulators(observers...), H)
+advance_forward_walking!(observers, n, H::AbstractSignFreeOperator) = advance_forward_walking!(Tuple(observers), n, H)
+
+_advance_jointly!(::Tuple{}, H::AbstractSignFreeOperator) = nothing
+function _advance_jointly!(FWs::Tuple, H::AbstractSignFreeOperator)
+    ref = first(FWs)
+    pending = empty!(ref.pending)
+    for FW in FWs
+        _can_advance_jointly(ref, FW) && _collect_pending_slots!(pending, FW)
+    end
+    advance_slots!(pending, ref.propagator, ref.logψ, H, ref.Hilbert, ref.BasicAcc.weight_normalization[], ref.parallelization, ref.RNGs)
+    foreach(slot -> slot.advanced = true, pending)
+    empty!(pending)
+    return nothing
+end
+
+function saveObservables_before!(FW::ForwardWalkingAccumulator, n, Walkers::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, reconfiguration::AbstractReconfigurationScheme)
+    # Slots not already advanced by a joint pass (standalone use, or an incompatible accumulator).
+    _advance_jointly!((FW,), H)
+    _record_slots!(FW, n)
+    if mod(n, FW.cadence) == 0
+        slot = _find_free_slot(FW.slots)
+        _seed!(slot, FW, Walkers, n)
+        n > 1 && _record_seed!(FW, slot, get_bin_index(n, FW.BasicAcc))
+    end
+    return nothing
+end
+
+_seed!(slot::ForwardWalkingSlot, FW::ForwardWalkingAccumulator, Walkers::AbstractWalkerEnsemble, n) =
+    seed_from_main_population!(slot, Walkers, FW.Observable, FW.logψ, FW.Hilbert, n, FW.weights_bufs, FW.RNGs, FW.parallelization)
+_seed!(group::AbstractVector{<:ForwardWalkingSlot}, FW::ForwardWalkingAccumulator, Walkers::AbstractWalkerEnsemble, n) =
+    seed_from_main_population!(group, Walkers, FW.Observable, FW.logψ, FW.Hilbert, n, FW.parallelization)
+
+# Adds the contributions of all active slots (just advanced, at their current depth `step`) to
+# Num/Denom, frees slots that reached mProj, and clears the `advanced` flags for the next step.
+function _record_slots!(FW::ForwardWalkingAccumulator, n)
+    bin_index = get_bin_index(n, FW.BasicAcc)
+    for slot_or_group in FW.slots
+        group = _as_group(slot_or_group)
+        first(group).active || continue
         # No warm-up guard needed here (unlike BasicAccumulator's own getEnergy_step!, which guards
         # `n > p`): a slot's `step` advances by exactly 1 per main-loop call from the moment it's
         # seeded, so the current step is always `n = n_seed + slot.step = n_seed + c - 1`, and since
         # `n_seed >= 1` this gives `n >= c`, which is always within Gnps[n,c]'s freshly-written,
         # valid range (see the type docstring for why reading at the *current* n, not n_seed, is what
         # makes this the correct forward-looking reference-population weight growth).
-        FW.Num[c, bin_index] += origin_weighted_seed_value(slot) * slot.cum_weight
+        c = first(group).step + 1
+        _add_num!(FW.Num, slot_or_group, c, bin_index)
+        # Denom is the reference-population growth, independent of the observable/move, so it is
+        # shared across every move of a resolve_moves group.
         FW.Denom[c, bin_index] += FW.BasicAcc.Gnps[n, c]
-        slot.step == FW.mProj && (slot.active = false)
-    end
-
-    if mod(n, FW.cadence) == 0
-        slot = _find_free_slot(FW.slots)
-        seed_from_main_population!(slot, Walkers, FW.Observable, FW.logψ, FW.Hilbert, n, FW.weights_buf, FW.rng)
-        if n > 1
-            FW.Num[1, bin_index] += Statistics.mean(slot.seed_weights)
-            FW.Denom[1, bin_index] += slot.cum_weight
+        for slot in group
+            slot.advanced = false
+            slot.step == FW.mProj && (slot.active = false)
         end
     end
-
     return nothing
 end
 
-# resolve_moves=true variant: FW.slots holds one *group* of n_moves slots per seed event (instead of
-# one slot per seed event), and FW.Num carries a leading move axis (FW.Denom stays shared/2D across
-# moves -- see the type docstring). Structurally mirrors the method above almost exactly.
-function saveObservables_before!(FW::ForwardWalkingAccumulator{ObsType,SlotType} where {ObsType<:AbstractOffdiagonalObservable,SlotType<:AbstractVector{<:ForwardWalkingSlot}}, n, Walkers::AbstractWalkerEnsemble, H::AbstractSignFreeOperator, reconfiguration::AbstractReconfigurationScheme)
-    bin_index = get_bin_index(n, FW.BasicAcc)
-
-    for group in FW.slots
-        group[1].active || continue
-        for slot in group
-            advance_slot!(slot, FW.propagator, FW.logψ, H, FW.Hilbert, FW.BasicAcc.weight_normalization[], FW.parallelization, FW.rng)
-        end
-        c = group[1].step + 1
-        for (i, slot) in enumerate(group)
-            FW.Num[i, c, bin_index] += origin_weighted_seed_value(slot) * slot.cum_weight
-        end
-        # Denom is the reference-population growth (BasicAcc.Gnps at the current step n -- see the
-        # advance loop above and the type docstring), which doesn't depend on the observable/move at
-        # all, so it is legitimately shared across every move in this group.
-        FW.Denom[c, bin_index] += FW.BasicAcc.Gnps[n, c]
-        group[1].step == FW.mProj && foreach(s -> s.active = false, group)
+_add_num!(Num::AbstractMatrix, slot::ForwardWalkingSlot, c, bin_index) = (Num[c, bin_index] += origin_weighted_seed_value(slot) * slot.cum_weight)
+function _add_num!(Num::AbstractArray{<:Real,3}, group::AbstractVector{<:ForwardWalkingSlot}, c, bin_index)
+    for (i, slot) in enumerate(group)
+        Num[i, c, bin_index] += origin_weighted_seed_value(slot) * slot.cum_weight
     end
+    return Num
+end
 
-    if mod(n, FW.cadence) == 0
-        group = _find_free_slot(FW.slots)
-        seed_from_main_population!(group, Walkers, FW.Observable, FW.logψ, FW.Hilbert, n, FW.rng)
-        if n > 1
-            for (i, slot) in enumerate(group)
-                FW.Num[i, 1, bin_index] += Statistics.mean(slot.seed_weights)
-            end
-            FW.Denom[1, bin_index] += group[1].cum_weight
-        end
+function _record_seed!(FW::ForwardWalkingAccumulator, slot::ForwardWalkingSlot, bin_index)
+    FW.Num[1, bin_index] += Statistics.mean(slot.seed_weights)
+    FW.Denom[1, bin_index] += slot.cum_weight
+    return nothing
+end
+function _record_seed!(FW::ForwardWalkingAccumulator, group::AbstractVector{<:ForwardWalkingSlot}, bin_index)
+    for (i, slot) in enumerate(group)
+        FW.Num[i, 1, bin_index] += Statistics.mean(slot.seed_weights)
     end
-
+    FW.Denom[1, bin_index] += first(group).cum_weight
     return nothing
 end
 
