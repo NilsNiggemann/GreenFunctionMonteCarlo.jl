@@ -5,7 +5,41 @@ An abstract type representing a general operator. This serves as a base type for
 """
 abstract type AbstractOperator end
 
-abstract type OffdiagonalOperator end
+"""
+    AbstractOffdiagonalObservable <: AbstractOperator
+
+Abstract type for operators `O` that are off-diagonal in the sampled configuration basis and are to be
+*measured* (not used for propagation) via streaming forward-walking (see `ForwardWalkingAccumulator`).
+
+Unlike `AbstractSignFreeOperator`, there is no sign constraint on the matrix elements themselves:
+implementations are free to define any non-negative per-move *sampling* weight via `observable_weight`,
+including weights that mix the guiding-function ratio with an arbitrary extra factor (e.g. a structure
+factor's `cos²(q·r/2)` phase weighting, which keeps sampling weights non-negative without imposing a
+sign constraint on the physical operator itself).
+
+# Interface
+- `get_move(O::AbstractOffdiagonalObservable, idx::Integer)`: return the candidate move at index `idx`
+  (reuses the generic `get_move` interface shared with `AbstractSignFreeOperator`).
+- `n_moves(O::AbstractOffdiagonalObservable)`: the number of candidate moves.
+- `observable_weight(O::AbstractOffdiagonalObservable, idx::Integer, ψratio::Real, x::AbstractConfig)`:
+  the non-negative sampling weight for move `idx`, given the guiding-function ratio `ψ(x′)/ψ(x)` for that move.
+"""
+abstract type AbstractOffdiagonalObservable <: AbstractOperator end
+
+"""
+    n_moves(O::AbstractOffdiagonalObservable)
+
+Return the number of candidate moves/matrix elements of `O`.
+"""
+function n_moves end
+
+"""
+    observable_weight(O::AbstractOffdiagonalObservable, idx::Integer, ψratio::Real, x::AbstractConfig)
+
+Return the non-negative sampling weight for move `idx` of `O`, given the guiding-function ratio
+`ψratio = ψ(x′)/ψ(x)` for that move.
+"""
+function observable_weight end
 
 """
     DiagonalOperator
