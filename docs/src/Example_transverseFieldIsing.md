@@ -324,3 +324,98 @@ end
 
 !!! note
     Here we only bin the `num_bins` accumulated bins down once, with a single `bunching` value, to get *some* error estimate. For a real production run, you should instead check that this error estimate is stable as the bunching size grows (i.e. that the bins are sufficiently decorrelated) before trusting it — see the warning in the "Example evaluation" section of [Advanced Usage](Advanced.md).
+
+## Observables off-diagonal in the computational basis
+
+Observables such as the transverse magnetization $\sum_i \sigma^x_i$ change the configuration when applied, so they cannot be read off from the walker configurations, and `getObs_diagonal` does not apply. Instead, they are measured by **forward walking**: every `cadence` steps, the operator is applied once to a snapshot of the running walker population. The resulting sub-population is then propagated for `mProj` further steps with the ordinary dynamics, and is normalized against the main population's own weight growth. For depth $p=0$ this gives the biased *mixed estimator* $\langle \psi_T | O | \psi_0 \rangle$; as $p$ grows, the estimate converges to the true ground-state expectation value $\langle O \rangle$, in the same way that the energy converges with the projection order.
+
+Three ingredients are needed:
+
+1. An off-diagonal observable, built with [`offdiagonalObservable`](@ref) from a list of `moves` (same format as for the Hamiltonian) and a weight function `weightfunc(idx, ψratio, x)`. Here, `ψratio` is the ratio $\psi(x')/\psi(x)$ of the guiding function for move `idx`, and the weight must be non-negative. For $\sigma^x_i$ the matrix element is $1$, so the weight is just `ψratio`. If a move can be forbidden (e.g. by a hardcore constraint), return `0` for it.
+2. A [`ForwardWalkingAccumulator`](@ref), which needs the same `logψ`, `H`, `Hilbert` and propagator as the main simulation, the forward depth `mProj`, the `cadence` and the sub-population size `Nsub` (which must equal `NWalkers`).
+3. The same [`BasicAccumulator`](@ref) that is passed to the `CombinedObserver` must also be given to the `ForwardWalkingAccumulator`, and it must come *first* in the `CombinedObserver`. It supplies the reference-population weights used for normalization, and the bin bookkeeping. It requires `mProj < 2 * m_proj`.
+
+!!! note
+    `offdiagonalObservable` and `ForwardWalkingAccumulator` are not exported, so we import them explicitly.
+
+We reuse the setup of the previous section (`H`, `Hilbert`, `startConfig`, `m_proj`, `num_bins`, `NSteps`, `NWalkers`). The forward-walking sub-populations need a guiding function with an efficient update buffer, so instead of the `NaiveFunction` used above we use the built-in [`Jastrow`](@ref) with the same nearest-neighbor correlations.
+```@example TFI
+using GreenFunctionMonteCarlo: offdiagonalObservable, ForwardWalkingAccumulator,
+    get_observable_from_accumulator_bunching
+
+# σˣ_i flips site i, with matrix element 1, so the weight is the bare guiding-function ratio.
+# Since all moves are included, the result is the sum Σ_i ⟨σˣ_i⟩ over all sites.
+sx_moves = [Bool[i == j for j in 1:lattice_size] for i in 1:lattice_size]
+SigmaX = offdiagonalObservable(sx_moves, (idx, ψratio, x) -> ψratio, Hilbert)
+```
+```@example TFI
+mProj_fw = 20     # number of forward-walking steps; the estimate is obtained for p = 0, ..., mProj_fw
+cadence = 2       # seed a new sub-population every 2 steps
+outfile_fw = tempname() * ".h5"
+
+v_ij = zeros(lattice_size, lattice_size) # Jastrow couplings, nonzero for nearest neighbors only
+for i in 1:lattice_size-1
+    v_ij[i, i+1] = v_ij[i+1, i] = 0.5
+end
+logψ_fw = Jastrow(zeros(lattice_size), v_ij)
+
+problem = GFMCProblem(startConfig, NWalkers, ContinuousTimePropagator(dtau); logψ = logψ_fw, H, Hilbert)
+mean_TotalWeights_fw, w_avg_fw = estimate_weights_continuousTime!(problem; Nepochs=4, Nsamples=1000, verbose=false, logger=nothing)
+propagator = ContinuousTimePropagator(dtau, w_avg_fw)
+problem = GFMCProblem(startConfig, NWalkers, propagator; logψ = logψ_fw, H, Hilbert)
+
+BasicAcc_fw = BasicAccumulator(outfile_fw, m_proj, NWalkers; num_bins, bin_elements = NSteps ÷ num_bins + 1, weight_normalization = mean_TotalWeights_fw)
+FWAcc = ForwardWalkingAccumulator(outfile_fw, SigmaX, BasicAcc_fw, startConfig, logψ_fw, H, Hilbert,
+                                  propagator, mProj_fw, cadence, NWalkers)
+
+runGFMC!(problem, CombinedObserver((BasicAcc_fw, FWAcc)), NSteps; logger=nothing);
+nothing # hide
+```
+As for the diagonal accumulators, we bin the result to obtain error bars. The output has one vector of length `mProj_fw + 1` (the forward depth $p$) per bunched bin.
+```@example TFI
+sx_bins = get_observable_from_accumulator_bunching(FWAcc, bunching)
+sx_mean = mean(sx_bins)
+sx_std = std(sx_bins)
+nothing # hide
+```
+For comparison, we diagonalize the $2^L$-dimensional Hamiltonian exactly (feasible for our small system), build the same operator $\sum_i \sigma^x_i$, and plot the estimate as a function of the forward depth.
+```@example TFI
+using LinearAlgebra
+
+function exact_sigmax(L, h, J; periodic = false)
+    D = 2^L
+    Hmat = zeros(D, D)
+    Ox = zeros(D, D)
+    for s in 0:D-1
+        spins = [1 - 2 * ((s >> (i - 1)) & 1) for i in 1:L] # σᶻ_i = ±1
+        bonds = periodic ? L : L - 1
+        Hmat[s+1, s+1] = -J * sum(spins[i] * spins[mod1(i + 1, L)] for i in 1:bonds)
+        for i in 1:L
+            t = xor(s, 1 << (i - 1)) # flip spin i
+            Hmat[t+1, s+1] += -h
+            Ox[t+1, s+1] += 1
+        end
+    end
+    ψ0 = eigen(Symmetric(Hmat)).vectors[:, 1]
+    return ψ0' * Ox * ψ0
+end
+sx_exact = exact_sigmax(lattice_size, h, J; periodic)
+
+let
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel = L"forward depth $p$", ylabel = L"$\sum_i \langle \sigma^x_i \rangle$")
+    p = 0:mProj_fw
+    lines!(ax, p, sx_mean, label = L"GFMC$$")
+    band!(ax, p, sx_mean .- sx_std, sx_mean .+ sx_std, color = (:blue, 0.2))
+    hlines!(ax, sx_exact, color = :black, linestyle = :dash, label = L"Exact$$")
+    axislegend(ax, position = :rb)
+    fig
+end
+```
+At $p=0$ we see the biased mixed estimator, which depends on the guiding wavefunction. With increasing $p$, the estimate moves towards the exact value and is compatible with it within the error bars (which grow with $p$, as for the energy). Convergence should be checked for convergence with `mProj_fw` in the same way as the projection order of the energy.
+
+!!! tip
+    - To measure a *momentum-resolved* observable, such as a structure factor $B(q)=\sum_j e^{iqj}\sigma^x_j$, the weights must stay non-negative for sampling. A `cos²` phase weighting is a convenient choice, see [`offdiagonalObservable`](@ref).
+    - By default, a multi-move observable yields the *sum* over all its moves. Pass `resolve_moves = true` to `ForwardWalkingAccumulator` to obtain one estimate per move (an `(n_moves, mProj+1)` array per bin) instead, at `n_moves` times the cost.
+    - Several accumulators can share one `BasicAccumulator` in a `CombinedObserver`; their sub-populations are then advanced together. Use a multithreaded `parallelization` to speed up seeding and propagation.
+    - Forward walking costs roughly `fld(mProj, cadence) + 1` additional small populations per step, but memory does not grow with `NSteps`.
