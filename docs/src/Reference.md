@@ -49,6 +49,7 @@ GreenFunctionMonteCarlo.ZeroDiagOperator
 GreenFunctionMonteCarlo.LazyObservableAccumulator
 GreenFunctionMonteCarlo.allocate_GWF_buffers
 GreenFunctionMonteCarlo.apply!
+GreenFunctionMonteCarlo.advance_forward_walking!
 GreenFunctionMonteCarlo.average_obs_walkers
 GreenFunctionMonteCarlo.continuos_time_propagation!
 GreenFunctionMonteCarlo.data_bunch
@@ -74,6 +75,7 @@ GreenFunctionMonteCarlo.log_observable
 GreenFunctionMonteCarlo.minimizeReconfiguration!
 GreenFunctionMonteCarlo.pre_move_affect!
 GreenFunctionMonteCarlo.projection_order
+GreenFunctionMonteCarlo.propagate_walker!
 GreenFunctionMonteCarlo.propagateWalkers!
 GreenFunctionMonteCarlo.reconfigurateWalkers!
 GreenFunctionMonteCarlo.reset_accumulator!
